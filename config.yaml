@@ -1,0 +1,35 @@
+# config.yaml
+# Configuration for NTRO Problem 26153 — AI-based Network Attack Forecasting
+
+paths:
+  raw_data_dir: data/raw
+  demo_data_dir: data/demo
+  processed_dir: data/processed
+  model_dir: models/saved
+
+data:
+  min_observations: 20
+  missing_value_pct_threshold: 0.3
+  min_temporal_windows: 5
+  window_size_sec: 5
+  seq_len: 5
+
+model:
+  hidden_dim: 64
+  num_layers: 2
+  epochs: 30
+  batch_size: 256
+  lr: 0.001
+
+labels:
+  attack_keywords:
+    - FTP-BruteForce
+    - DoS
+    - Bot
+    - Infilteration
+    - BruteForce
+    - XSS
+    - SQL
+    - PortScan
+    - DDoS
+    - Heartbleed
