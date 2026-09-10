@@ -68,6 +68,10 @@ def run_inference(
     dict matching the COMMON JSON CONTRACT.
     """
     # ------------------------------------------------------------------
+    # 0. Check for empty traffic (e.g. initial padding or dead air)
+    if "fwd_pkts" in df_features.columns and df_features["fwd_pkts"].sum() == 0 and df_features["bwd_pkts"].sum() == 0:
+        return {"status": "OK", "mode": None, "risk": 0.0, "risk_level": "Safe", "risk_current": 0.0, "forecast": [0.0] * forecast_steps, "stage": "Benign", "stage_confidence": 1.0, "per_window_risk": [0.0], "per_window_stage": ["Benign"], "n_windows": 1, "n_flagged": 0, "important_features": [], "important_windows": [], "matched_indicators": [], "dynamics_mse": 0.0, "synthetic": False, "error": None}
+
     # 0. Check model is trained
     # ------------------------------------------------------------------
     if model.status != "TRAINED":
