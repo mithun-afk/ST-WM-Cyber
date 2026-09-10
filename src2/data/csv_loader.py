@@ -151,9 +151,10 @@ def load_and_normalize_csv(path: str | Path) -> tuple[pd.DataFrame, str]:
     # 9. Clip numerical columns at 1st and 99th percentile
     # ------------------------------------------------------------------
     for col in CANONICAL_FEATURES:
-        lo = df[col].quantile(0.01)
-        hi = df[col].quantile(0.99)
-        df[col] = df[col].clip(lo, hi)
+        s = pd.to_numeric(df[col], errors="coerce")
+        lo = s.quantile(0.01)
+        hi = s.quantile(0.99)
+        df[col] = s.clip(lo, hi)
 
     logger.info("Loaded %d rows from '%s' (mode=FLOW_ONLY_MODE)", len(df), path)
     return df, "FLOW_ONLY_MODE"

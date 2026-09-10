@@ -35,7 +35,7 @@ class LivePipeline:
 
     def start(self):
         self.is_running = True
-        self.history = []
+        self.history = [_empty_features() for _ in range(self.config.get("seq_len", 5))]
         self.latest_result = None
         self.total_packets = 0
         self.current_window = 0

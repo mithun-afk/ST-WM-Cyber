@@ -1,219 +1,598 @@
 """
-app.py
---------------
-Unified Pipeline 2.0 Dashboard with Live Capture & Beautiful UI
+app.py — ST-WM Network Attack Forecasting Dashboard
+NTRO Problem 26153 | Spatial-Temporal World Model | Fully Offline
 """
 import os
-import torch
+import sys
+import time
 import numpy as np
-import streamlit as st
 import pandas as pd
+import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
-import time
+import torch
 
-# Pipeline 2.0 Imports
-import sys
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from src2.models.world_model import STGWMModel
-from src2.models.inference import run_inference
+from src2.models.inference import run_inference, STAGE_NAMES
 from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
 from src2.live.live_pipeline import LivePipeline
 
-# ---------------------------------------------------------
-# Page Configuration & Aesthetics
-# ---------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Page config
+# ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="NTRO ST-GWM Dashboard",
+    page_title="ST-WM | Network Attack Forecasting",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# Premium Cybersecurity Custom CSS
+# ---------------------------------------------------------------------------
+# Premium dark-mode CSS
+# ---------------------------------------------------------------------------
 st.markdown("""
-    <style>
-    .stApp { background-color: #0e1117; color: #c9d1d9; }
-    h1, h2, h3 { color: #58a6ff; font-family: 'Inter', sans-serif; }
-    .metric-card {
-        background: rgba(33, 38, 45, 0.6);
-        border: 1px solid #30363d;
-        padding: 1.5rem; border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        backdrop-filter: blur(10px); margin-bottom: 1rem; text-align: center;
-    }
-    .metric-title { font-size: 0.9rem; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
-    .metric-value { font-size: 2rem; font-weight: 700; color: #58a6ff; }
-    .disclosure-banner {
-        background-color: #d29922; color: #000; padding: 10px 15px;
-        border-radius: 5px; font-size: 1.1rem; font-weight: bold; text-align: center; margin-bottom: 20px;
-    }
-    </style>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+html, body, .stApp { background-color: #0d1117; color: #c9d1d9; font-family: 'Inter', sans-serif; }
+h1, h2, h3, h4 { color: #58a6ff; }
+.stSidebar { background-color: #161b22; border-right: 1px solid #30363d; }
+
+.metric-card {
+    background: linear-gradient(135deg, #161b22 0%, #1c2128 100%);
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.metric-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; }
+.metric-value { font-size: 2.2rem; font-weight: 700; color: #58a6ff; line-height: 1; }
+.metric-sub   { font-size: 0.85rem; color: #8b949e; margin-top: 6px; }
+
+.risk-safe    { color: #3fb950 !important; }
+.risk-medium  { color: #d29922 !important; }
+.risk-high    { color: #f85149 !important; }
+
+.stage-badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 4px 0;
+}
+.badge-benign  { background: rgba(63,185,80,0.15); color: #3fb950; border: 1px solid #3fb950; }
+.badge-recon   { background: rgba(210,153,34,0.15); color: #d29922; border: 1px solid #d29922; }
+.badge-access  { background: rgba(248,81,73,0.15); color: #f85149; border: 1px solid #f85149; }
+.badge-lateral { background: rgba(248,81,73,0.2);  color: #ff7b72; border: 1px solid #ff7b72; }
+.badge-c2      { background: rgba(200,50,50,0.25); color: #ffa198; border: 1px solid #ffa198; }
+.badge-impact  { background: rgba(200,0,0,0.3);    color: #ff6e5a; border: 1px solid #ff6e5a; }
+
+.disclosure-bar {
+    background: linear-gradient(90deg, #1f2937, #1a2744, #1f2937);
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 10px 20px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #58a6ff;
+    margin-bottom: 20px;
+    letter-spacing: 1px;
+}
+</style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# Data & Model Loading
-# ---------------------------------------------------------
-@st.cache_data(ttl=5)
-def load_benchmark_data():
-    csv_path = os.path.join("eval_results", "cv_benchmark_summary.csv")
-    if os.path.exists(csv_path):
-        return pd.read_csv(csv_path)
-    return None
-
+# ---------------------------------------------------------------------------
+# Model loading
+# ---------------------------------------------------------------------------
 @st.cache_resource
-def load_deployment_model():
+def load_model():
     model, status = STGWMModel.load("eval_results")
     if status != "LOADED":
         return None
     return model
 
-model = load_deployment_model()
+@st.cache_data(ttl=10)
+def load_benchmark():
+    path = os.path.join("eval_results", "cv_benchmark_summary.csv")
+    if os.path.exists(path):
+        return pd.read_csv(path)
+    return None
 
-if 'live_pipeline' not in st.session_state:
+model = load_model()
+
+# Session state
+if "live_pipeline" not in st.session_state:
     st.session_state.live_pipeline = None
+if "risk_history" not in st.session_state:
+    st.session_state.risk_history = []
+if "stage_history" not in st.session_state:
+    st.session_state.stage_history = []
 
-# ---------------------------------------------------------
-# UI Layout
-# ---------------------------------------------------------
-st.markdown('<div class="disclosure-banner">🛡️ NTRO Problem 26153 - ST-WM | Live Packet Capture Enabled | Fully Offline</div>', unsafe_allow_html=True)
-st.title("🛡️ AI-Based Network Attack Forecasting")
-st.markdown("*Architecture: Spatial-Temporal World Model (ST-WM) | Inductive Graph Features (No GNN passing penalty) | MITRE Mapped*")
-st.markdown("---")
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+STAGE_BADGE = {
+    "Benign":            ("badge-benign",  "✅"),
+    "Reconnaissance":    ("badge-recon",   "🔍"),
+    "Initial Access":    ("badge-access",  "⚠️"),
+    "Lateral Movement":  ("badge-lateral", "🔄"),
+    "Command & Control": ("badge-c2",      "📡"),
+    "Impact":            ("badge-impact",  "🚨"),
+}
 
-if model is None:
-    st.error("⚠️ **Model weights not found.** Please run `python train_pipeline.py` first.")
-    st.stop()
+NEXT_MOVE = {
+    "Benign":
+        "No malicious activity detected. Network operating normally.",
+    "Reconnaissance":
+        "Attacker is mapping the network — scanning ports and fingerprinting services. "
+        "**Next expected action:** Exploitation of discovered open services or credential brute-force.",
+    "Initial Access":
+        "A foothold has been established on an endpoint. "
+        "**Next expected action:** Payload deployment, persistence mechanisms (scheduled tasks, registry keys), "
+        "or establishing a Command & Control beacon.",
+    "Lateral Movement":
+        "Attacker is pivoting inside the network — accessing file shares, using pass-the-hash, or RDP hopping. "
+        "**Next expected action:** Privilege escalation to Domain Admin or access to critical data stores.",
+    "Command & Control":
+        "Remote control channel established. Attacker is issuing commands to compromised hosts. "
+        "**Next expected action:** Bulk data staging and exfiltration, or ransomware deployment.",
+    "Impact":
+        "Active destructive action in progress — ransomware encryption, data deletion, or DDoS. "
+        "**Immediate response required.** Isolate affected segments and invoke IR playbook.",
+}
 
-page = st.sidebar.radio("Navigation", ["▶️ Live Network Capture", "📊 CV Benchmarks", "🧠 Saliency & Rollout"])
+FEATURE_EXPLAIN = {
+    "syn_rate":           "Abnormally high SYN packet rate — classic signature of port scanning or SYN flood.",
+    "flow_bytes_per_sec": "Extreme throughput spike — consistent with data exfiltration or volumetric DoS.",
+    "bwd_bytes":          "Large inbound data volume — may indicate C2 payload delivery or large file transfer.",
+    "fwd_pkts":           "Elevated packet count — aggressive scanning, flooding, or high-frequency beaconing.",
+    "rst_rate":           "High TCP RST rate — brute-force teardowns or aggressive port scanning.",
+    "pkt_ratio":          "Highly asymmetric packet exchange — automated tool traffic, not human browsing.",
+    "byte_ratio":         "Asymmetric byte flow — consistent with one-way exfiltration or reflective amplification.",
+    "iat_jitter":         "Irregular inter-arrival timing — evasive slow-scan or jittered C2 beaconing.",
+    "flow_iat_mean":      "Unusual flow timing — may indicate timing-based evasion or slow-loris attack.",
+    "pkt_len_mean":       "Atypical packet size distribution — malformed packets or exploit payload framing.",
+    "syn_flag_cnt":       "Elevated SYN count — TCP handshake flooding or broad connection enumeration.",
+    "rst_flag_cnt":       "Elevated RST count — aggressive teardown of failed connection attempts.",
+    "down_up_ratio":      "Imbalanced traffic direction — upload-heavy flows suggest data theft.",
+}
 
-if page == "📊 CV Benchmarks":
-    st.subheader("Model Performance Benchmark")
-    df = load_benchmark_data()
-    if df is not None:
-        st.dataframe(df, use_container_width=True)
+def risk_color(r: float) -> str:
+    if r < 0.30: return "#3fb950"
+    if r < 0.60: return "#d29922"
+    return "#f85149"
+
+def risk_label(r: float) -> str:
+    if r < 0.30: return "SAFE"
+    if r < 0.60: return "ELEVATED"
+    return "CRITICAL"
+
+def stage_badge_html(stage: str) -> str:
+    cls, icon = STAGE_BADGE.get(stage, ("badge-recon", "❓"))
+    return f'<span class="stage-badge {cls}">{icon} {stage}</span>'
+
+# ---------------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------------
+st.markdown(
+    '<div class="disclosure-bar">🛡️ NTRO PROBLEM 26153 &nbsp;|&nbsp; '
+    'ST-WM SPATIAL-TEMPORAL WORLD MODEL &nbsp;|&nbsp; '
+    'REAL-TIME NETWORK ATTACK FORECASTING &nbsp;|&nbsp; FULLY OFFLINE</div>',
+    unsafe_allow_html=True
+)
+
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
+with st.sidebar:
+    st.image("https://img.shields.io/badge/ST--WM-v2.0-blue?style=for-the-badge", use_container_width=True)
+    st.markdown("### Navigation")
+    page = st.radio(
+        "",
+        ["▶️ Live Network Capture", "📊 Model Benchmarks", "🧠 Feature Saliency"],
+        label_visibility="collapsed"
+    )
+    st.markdown("---")
+    st.markdown("**Architecture**")
+    st.caption("3-Head LSTM: Risk · Stage · Dynamics")
+    st.caption("Input: 25 inductive graph features")
+    st.caption("Forecast horizon: +35 seconds")
+    st.caption("Window size: 5 seconds")
+
+    if model is None:
+        st.error("⚠️ Model not trained. Run `python train_pipeline.py`")
     else:
-        st.info("No CV benchmark file found. Benchmarks will populate after pipeline run completes.")
-        
-    st.markdown("""
-    ### 📝 Benchmark Caveats & Integrity Statement
-    - **No Fake Balancing:** We preserve the exact chronological sequences.
-    - **Data Clustering Limitations:** Because attacks in CIC-IDS-2018 are highly temporally clustered, strict chronological CV folds 1 and 2 often contain 0 positive examples.
-    - **World Model over XGBoost:** The baseline pipeline uses a 15-epoch, H=32 under-trained LSTM. By increasing H=64 and epochs=30, the temporal dynamics properly capture state transitions, outperforming tree-based baselines.
-    """)
+        st.success("✅ Model loaded")
 
-if page == "🧠 Saliency & Rollout":
-    st.info("Run the Live Capture tab (Tab 3) to populate live World Model Rollouts & Saliency here!")
-    if st.session_state.live_pipeline and st.session_state.live_pipeline.latest_result:
-        result = st.session_state.live_pipeline.latest_result
-        if result.get("important_features"):
-            st.write("#### Real-time Feature Saliency (Input-Gradient)")
-            s_df = pd.DataFrame(result["important_features"])
-            s_df = s_df.rename(columns={"feature": "Feature", "importance": "Saliency"})
-            fig2 = px.bar(s_df.head(10), x="Saliency", y="Feature", orientation="h", color="Saliency", color_continuous_scale="Reds")
-            fig2.update_layout(yaxis={'categoryorder':'total ascending'})
-            st.plotly_chart(fig2, use_container_width=True)
-
+# ---------------------------------------------------------------------------
+# PAGE: Live Network Capture
+# ---------------------------------------------------------------------------
 if page == "▶️ Live Network Capture":
-    st.subheader("📡 Live Network Capture & PCAP Replay")
-    st.markdown("Ingests live packets or PCAP files, aggregates via 5-second temporal windows, extracts structural graph features, and queries the trained Spatial-Temporal World Model.")
+    st.title("📡 Live Network Attack Forecasting")
+    st.markdown("*Real-time packet capture → Spatial-Temporal World Model → 35-second attack trajectory forecast*")
+    st.markdown("---")
 
-    mode = st.radio("Select Input Mode:", ["PCAP Replay", "Live Network Capture"], horizontal=True)
+    if model is None:
+        st.error("⚠️ Model not found. Please run `python train_pipeline.py` first.")
+        st.stop()
 
-    if mode == "PCAP Replay":
-        st.write("Drop a PCAP file to replay traffic as if it were live.")
-        if st.button("▶️ Start Dummy PCAP Replay"):
-            if st.session_state.live_pipeline:
-                st.session_state.live_pipeline.stop()
-            st.session_state.live_pipeline = LivePipeline(model=model, pcap_file="dummy_test.pcap")
-            st.session_state.live_pipeline.start()
-            st.rerun()
-    else:
-        st.write("Requires Npcap/WinPcap installed on Windows.")
-        
-        # Add interface dropdown
+    # --- Controls ---
+    col_ctrl1, col_ctrl2 = st.columns([3, 1])
+    with col_ctrl1:
+        mode_select = st.radio(
+            "Input Mode",
+            ["🔴 Live Network Capture", "📁 PCAP Replay"],
+            horizontal=True
+        )
+
+    with col_ctrl2:
+        st.markdown("<br>", unsafe_allow_html=True)
+
+    if "Live" in mode_select:
         from src2.live.interface import get_interfaces
         ifaces = get_interfaces()
-        iface_options = [f"{i['name']} - {i['description']}" for i in ifaces] if ifaces else ["Default"]
-        selected_iface = st.selectbox("Select Network Interface", iface_options)
-        
-        if st.button("▶️ Start Live Network Capture"):
+        iface_options = [f"{i['name']} — {i['description']}" for i in ifaces] if ifaces else ["Default"]
+        selected_iface = st.selectbox("🔌 Network Interface", iface_options)
+        iface_name = selected_iface.split(" — ")[0] if selected_iface != "Default" else None
+    else:
+        iface_name = None
+
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("▶️ Start Capture", type="primary", use_container_width=True):
             if st.session_state.live_pipeline:
                 st.session_state.live_pipeline.stop()
-            
-            # Extract real name from dropdown selection
-            iface_name = None
-            if selected_iface != "Default":
-                iface_name = selected_iface.split(" - ")[0]
-                
-            st.session_state.live_pipeline = LivePipeline(model=model, interface_name=iface_name)
+            st.session_state.risk_history = []
+            st.session_state.stage_history = []
+            if "PCAP" in mode_select:
+                st.session_state.live_pipeline = LivePipeline(model=model, pcap_file="data/demo/demo_traffic.csv")
+            else:
+                st.session_state.live_pipeline = LivePipeline(model=model, interface_name=iface_name)
             st.session_state.live_pipeline.start()
             st.rerun()
 
-    if st.button("⏹️ Stop Capture"):
-        if st.session_state.live_pipeline:
-            st.session_state.live_pipeline.stop()
-            st.session_state.live_pipeline = None
+    with btn_col2:
+        if st.button("⏹️ Stop Capture", use_container_width=True):
+            if st.session_state.live_pipeline:
+                st.session_state.live_pipeline.stop()
+                st.session_state.live_pipeline = None
             st.rerun()
 
-    if st.session_state.live_pipeline:
-        lp = st.session_state.live_pipeline
-        st.write(f"**Pipeline Status:** `{lp.status}`")
-        
+    st.markdown("---")
+
+    lp = st.session_state.live_pipeline
+    if lp is None:
+        st.info("👆 Select a network interface and click **Start Capture** to begin real-time monitoring.")
+        st.stop()
+
+    # Status badge
+    status_color = "#3fb950" if "FORECAST" in lp.status else "#d29922"
+    st.markdown(
+        f'<div style="background:{status_color}22; border:1px solid {status_color}; '
+        f'border-radius:8px; padding:8px 16px; color:{status_color}; '
+        f'font-weight:600; margin-bottom:16px;">⚡ {lp.status}</div>',
+        unsafe_allow_html=True
+    )
+
+    result = lp.latest_result
+
+    if result and result.get("status") == "OK":
+        risk = result.get("risk", 0.0)
+        stage = result.get("stage", "Benign")
+        forecast = result.get("forecast", [])
+        features = result.get("important_features", [])
+
+        # Track rolling history
+        st.session_state.risk_history.append(risk)
+        st.session_state.stage_history.append(stage)
+        if len(st.session_state.risk_history) > 60:
+            st.session_state.risk_history.pop(0)
+            st.session_state.stage_history.pop(0)
+
+        # ---------------------------------------------------------------
+        # Top KPI row
+        # ---------------------------------------------------------------
+        k1, k2, k3, k4 = st.columns(4)
+        rc = risk_color(risk)
+        rl = risk_label(risk)
+        with k1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">Current Risk</div>
+                <div class="metric-value" style="color:{rc}">{risk:.1%}</div>
+                <div class="metric-sub" style="color:{rc}">● {rl}</div>
+            </div>""", unsafe_allow_html=True)
+        with k2:
+            cls, icon = STAGE_BADGE.get(stage, ("badge-recon", "❓"))
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">Detected Stage</div>
+                <div style="margin-top:12px">{stage_badge_html(stage)}</div>
+                <div class="metric-sub">MITRE ATT&CK Mapped</div>
+            </div>""", unsafe_allow_html=True)
+        with k3:
+            peak = max(forecast) if forecast else risk
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">Peak Forecast (+35s)</div>
+                <div class="metric-value" style="color:{risk_color(peak)}">{peak:.1%}</div>
+                <div class="metric-sub">Autoregressive Rollout</div>
+            </div>""", unsafe_allow_html=True)
+        with k4:
+            n_flagged = result.get("n_flagged", 0)
+            n_windows = result.get("n_windows", 0)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">Windows Flagged</div>
+                <div class="metric-value">{n_flagged}/{n_windows}</div>
+                <div class="metric-sub">In current sequence</div>
+            </div>""", unsafe_allow_html=True)
+
+        # ---------------------------------------------------------------
+        # Charts row: Risk gauge | Rolling history | Forecast
+        # ---------------------------------------------------------------
+        chart_c1, chart_c2, chart_c3 = st.columns([1, 2, 2])
+
+        with chart_c1:
+            # Gauge chart
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=risk * 100,
+                number={"suffix": "%", "font": {"size": 28, "color": rc}},
+                gauge={
+                    "axis": {"range": [0, 100], "tickcolor": "#8b949e"},
+                    "bar": {"color": rc, "thickness": 0.25},
+                    "bgcolor": "#161b22",
+                    "bordercolor": "#30363d",
+                    "steps": [
+                        {"range": [0, 30],  "color": "rgba(63,185,80,0.1)"},
+                        {"range": [30, 60], "color": "rgba(210,153,34,0.1)"},
+                        {"range": [60, 100],"color": "rgba(248,81,73,0.1)"},
+                    ],
+                    "threshold": {"line": {"color": "#ffffff", "width": 2}, "value": risk * 100},
+                },
+                title={"text": "Risk Score", "font": {"color": "#8b949e", "size": 13}},
+            ))
+            fig_gauge.update_layout(
+                paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
+                height=220, margin=dict(t=40, b=10, l=20, r=20),
+                font={"color": "#c9d1d9"}
+            )
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+        with chart_c2:
+            # Rolling 60-second risk history
+            hist = st.session_state.risk_history
+            x_hist = list(range(-len(hist) + 1, 1))
+            fig_hist = go.Figure()
+            # Color segments by threshold
+            fig_hist.add_trace(go.Scatter(
+                x=x_hist, y=hist,
+                fill="tozeroy",
+                mode="lines",
+                line=dict(color=rc, width=2),
+                fillcolor=f"rgba({','.join(str(int(int(rc[1:], 16) >> shift & 0xff)) for shift in [16,8,0])},0.15)",
+                name="Risk",
+            ))
+            fig_hist.add_hline(y=0.3, line_dash="dot", line_color="#3fb950", annotation_text="Safe", annotation_font_color="#3fb950")
+            fig_hist.add_hline(y=0.6, line_dash="dot", line_color="#d29922", annotation_text="Elevated", annotation_font_color="#d29922")
+            fig_hist.update_layout(
+                title="Rolling Risk History (last 60 windows)",
+                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                height=220, margin=dict(t=40, b=20, l=10, r=10),
+                font={"color": "#c9d1d9"},
+                yaxis=dict(range=[0, 1], gridcolor="#21262d", title="Risk"),
+                xaxis=dict(gridcolor="#21262d", title="Windows ago"),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+        with chart_c3:
+            # Forecast trajectory
+            if forecast:
+                fx = [f"t+{(i+1)*5}s" for i in range(len(forecast))]
+                fig_fc = go.Figure()
+                fig_fc.add_trace(go.Scatter(
+                    x=fx, y=forecast,
+                    mode="lines+markers",
+                    line=dict(color="#58a6ff", width=2),
+                    marker=dict(color=[risk_color(r) for r in forecast], size=8),
+                    name="Forecast",
+                ))
+                fig_fc.add_hrect(y0=0, y1=0.3, fillcolor="rgba(63,185,80,0.05)", line_width=0)
+                fig_fc.add_hrect(y0=0.3, y1=0.6, fillcolor="rgba(210,153,34,0.05)", line_width=0)
+                fig_fc.add_hrect(y0=0.6, y1=1.0, fillcolor="rgba(248,81,73,0.05)", line_width=0)
+                fig_fc.update_layout(
+                    title="35-Second Attack Trajectory Forecast",
+                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                    height=220, margin=dict(t=40, b=20, l=10, r=10),
+                    font={"color": "#c9d1d9"},
+                    yaxis=dict(range=[0, 1], gridcolor="#21262d", title="Risk Prob"),
+                    xaxis=dict(gridcolor="#21262d"),
+                    showlegend=False,
+                )
+                st.plotly_chart(fig_fc, use_container_width=True)
+
+        # ---------------------------------------------------------------
+        # Threat Intelligence
+        # ---------------------------------------------------------------
+        st.markdown("---")
+        st.markdown("### 🧠 Threat Intelligence")
+
+        ti_c1, ti_c2 = st.columns([2, 1])
+
+        with ti_c1:
+            cls, icon = STAGE_BADGE.get(stage, ("badge-recon", "❓"))
+            st.markdown(f"**Detected Stage:** {stage_badge_html(stage)}", unsafe_allow_html=True)
+
+            next_move = NEXT_MOVE.get(stage, "Unknown stage.")
+            if stage == "Benign":
+                st.success(f"**AI Assessment:** {next_move}")
+            elif stage in ("Reconnaissance", "Initial Access"):
+                st.warning(f"**AI Assessment:** {next_move}")
+            else:
+                st.error(f"**AI Assessment:** {next_move}")
+
+            # Saliency-driven reasoning
+            if features and risk > 0.20:
+                st.markdown("**Why is the AI raising this alert?**")
+                for item in features[:3]:
+                    feat = item.get("feature", "")
+                    imp = item.get("importance", 0)
+                    desc = FEATURE_EXPLAIN.get(feat, f"Anomalous variance in `{feat}`.")
+                    bar = "█" * int(imp * 20) + "░" * (20 - int(imp * 20))
+                    st.markdown(
+                        f"- **`{feat}`** `{bar}` *(importance: {imp:.2f})*  \n  ↳ {desc}"
+                    )
+
+        with ti_c2:
+            # Kill-chain progress
+            st.markdown("**MITRE ATT&CK Kill Chain**")
+            for i, s in enumerate(STAGE_NAMES):
+                if s == "Benign":
+                    continue
+                is_current = (s == stage)
+                past_stages = STAGE_NAMES[:STAGE_NAMES.index(stage) + 1] if stage in STAGE_NAMES else []
+                is_past = s in past_stages and not is_current
+
+                if is_current:
+                    icon = "🔴"
+                    color = "#f85149"
+                elif is_past:
+                    icon = "🟡"
+                    color = "#d29922"
+                else:
+                    icon = "⚪"
+                    color = "#484f58"
+
+                st.markdown(
+                    f'<div style="color:{color}; padding:2px 0; font-size:0.9rem;">'
+                    f'{icon} {s}</div>',
+                    unsafe_allow_html=True
+                )
+
+    elif result and result.get("status") == "ERROR":
+        st.error(f"⚠️ Inference Error: `{result.get('error')}`")
+    else:
+        st.info("⏳ Collecting traffic windows... First forecast in a few seconds.")
+
+    # Auto-refresh only while capture is running
+    if lp and lp.is_running:
+        time.sleep(1)
+        st.rerun()
+
+# ---------------------------------------------------------------------------
+# PAGE: Model Benchmarks
+# ---------------------------------------------------------------------------
+elif page == "📊 Model Benchmarks":
+    st.title("📊 Model Performance Benchmarks")
+    st.markdown("*Evaluated on held-out test set using strict chronological split — no temporal leakage.*")
+    st.markdown("---")
+
+    df_bench = load_benchmark()
+    if df_bench is not None:
+        # Style the table
+        st.dataframe(
+            df_bench.style.highlight_max(
+                subset=[c for c in df_bench.columns if c != "Metric"],
+                color="#0d2136", axis=1
+            ),
+            use_container_width=True, height=220
+        )
+    else:
+        st.warning("No benchmark data found. Run `python train_pipeline.py` to generate benchmarks.")
+
+    st.markdown("---")
+    st.markdown("""
+    ### Methodology & Integrity Statement
+
+    | Guarantee | Detail |
+    |-----------|--------|
+    | **No Temporal Leakage** | Chronological split: 70% Train / 15% Val / 15% Test. Windows never overlap across splits. |
+    | **Window-Level Training** | Training data aggregated into 5-second windows matching live capture granularity. Scaler fit on window distribution, not CIC per-flow records. |
+    | **Calibrated Threshold** | Decision threshold tuned on validation set via F1-maximization. Replaces hard-coded 0.5 which produced systematic false positives. |
+    | **Balanced Evaluation** | All metrics computed with `class_weight='balanced'` for Logistic Regression baseline; LSTM loss uses weighted binary cross-entropy. |
+    | **Dataset** | CIC-IDS-2018 (Canadian Institute for Cybersecurity). Wednesday capture: 7 attack categories. |
+    """)
+
+    st.markdown("---")
+    st.markdown("### Architecture Diagram")
+    st.code("""
+Input: [5 × 25 feature window]
+         │
+         ▼
+  ┌──────────────┐
+  │  LSTM Layers │  h=64, L=2, dropout=0.3
+  └──────┬───────┘
+         │ hidden state h_t
+    ┌────┴────┐────────────┐
+    ▼         ▼            ▼
+ Risk Head  Stage Head  Dynamics Head
+ sigmoid()  softmax(6)  linear(25)
+    │         │            │
+ P(attack)  MITRE Stage  ŜS_{t+1}
+             
+  Autoregressive rollout: feed ŜS_{t+1} back as input for +35s forecast
+    """, language="text")
+
+# ---------------------------------------------------------------------------
+# PAGE: Feature Saliency
+# ---------------------------------------------------------------------------
+elif page == "🧠 Feature Saliency":
+    st.title("🧠 Feature Saliency & Explainability")
+    st.markdown("*Input-gradient saliency — showing which features drove the latest prediction.*")
+    st.markdown("---")
+
+    lp = st.session_state.live_pipeline
+    if lp and lp.latest_result and lp.latest_result.get("important_features"):
         result = lp.latest_result
-        if result and result.get('status') != 'ERROR':
-            st.markdown("### Latest Forecast")
-            c1, c2, c3 = st.columns(3)
-            c1.markdown(f"<div class='metric-card'><div class='metric-title'>Peak Risk</div><div class='metric-value'>{result['risk']:.3f}</div></div>", unsafe_allow_html=True)
-            # using true model stage output
-            c2.markdown(f"<div class='metric-card'><div class='metric-title'>Predicted Stage</div><div class='metric-value'>{result['stage']}</div></div>", unsafe_allow_html=True)
-            c3.markdown(f"<div class='metric-card'><div class='metric-title'>Forecast Horizon</div><div class='metric-value'>+35s</div></div>", unsafe_allow_html=True)
-            
-            f_df = pd.DataFrame({"Time Window": [f"t+{i*5}s" for i in range(len(result['forecast']))], "Risk Probability": result['forecast']})
-            fig = px.line(f_df, x="Time Window", y="Risk Probability", markers=True, range_y=[0,1], color_discrete_sequence=["#ff7b72"])
-            st.plotly_chart(fig, use_container_width=True)
+        features = result["important_features"]
 
-            # Threat Intelligence Context
-            st.markdown("### 🕵️ Threat Intelligence: AI Reasoning & Projected Next Move")
-            
-            FEATURE_EXPLANATIONS = {
-                "syn_rate": "High frequency of SYN packets (TCP connection requests), strongly indicating active port scanning or SYN flood attacks.",
-                "flow_bytes_per_sec": "Abnormal spikes in data transfer rates.",
-                "bwd_bytes": "Large outbound payloads from internal targets, typical of data exfiltration or Command & Control beaconing.",
-                "fwd_pkts": "Elevated incoming packet volume.",
-                "rst_rate": "High rate of connection resets (RST), often seen in aggressive scanning or teardown of brute-force threads.",
-                "degree_ratio": "Asymmetric connection fan-out (one IP talking to many), a classic signature of network reconnaissance or worm propagation.",
-                "port_diversity": "Traffic targeting an unusually wide range of ports, confirming broad infrastructure scanning.",
-                "pkt_ratio": "Highly asymmetric packet exchanges, suggesting automated scanning or exploit payloads rather than normal human web browsing.",
-                "flow_duration": "Abnormally long or fragmented flow durations, characteristic of slow-loris attacks or persistent C2 beacons."
-            }
-            
-            NEXT_MOVE = {
-                "Benign": "No malicious activity detected. Normal operations.",
-                "Reconnaissance": "Target selection and vulnerability identification. The attacker will likely attempt **Initial Access** next (e.g., exploiting a discovered open port, brute-forcing credentials, or sending phishing payloads).",
-                "Initial Access": "A foothold has been established. The attacker's next move is likely **Execution & Persistence** (e.g., dropping malware payloads, creating scheduled tasks, or establishing a C2 beacon).",
-                "Lateral Movement": "Internal pivoting detected. The attacker will likely attempt **Privilege Escalation or Collection** next (e.g., dumping credentials, accessing file shares, or compromising the domain controller).",
-                "Command & Control": "Remote control established. The attacker's next move is likely **Data Exfiltration** (bundling and stealing sensitive files) or executing final **Impact** payloads (e.g., ransomware encryption).",
-                "Impact": "Active disruption in progress. The attacker may attempt to **destroy backups** or **spread ransomware to adjacent subnets**."
-            }
+        feat_df = pd.DataFrame(features).rename(columns={"feature": "Feature", "importance": "Saliency"})
+        feat_df = feat_df.sort_values("Saliency", ascending=True)
 
-            stage_name = result.get('stage', 'Benign')
-            st.info(f"**🎯 Hacker's Projected Next Move:** {NEXT_MOVE.get(stage_name, 'Unknown')}")
-            
-            if result.get('important_features') and result.get('risk', 0) > 0.15:
-                top_features = result['important_features'][:3]
-                reasoning = []
-                for item in top_features:
-                    feat = item['feature']
-                    desc = FEATURE_EXPLANATIONS.get(feat, f"Anomalous variance detected in '{feat}'.")
-                    reasoning.append(f"- **{feat}**: {desc}")
-                
-                st.warning(f"**🔍 Why is the risk elevated ({result['risk']:.2f})?**\nThe AI Saliency Engine identified the following structural anomalies driving this forecast:\n\n" + "\n".join(reasoning))
+        fig_sal = go.Figure(go.Bar(
+            x=feat_df["Saliency"],
+            y=feat_df["Feature"],
+            orientation="h",
+            marker=dict(
+                color=feat_df["Saliency"],
+                colorscale=[[0, "#3fb950"], [0.5, "#d29922"], [1.0, "#f85149"]],
+                showscale=True,
+                colorbar=dict(title="Saliency", tickfont=dict(color="#c9d1d9"), titlefont=dict(color="#c9d1d9")),
+            ),
+        ))
+        fig_sal.update_layout(
+            title="Feature Importance (Input-Gradient Saliency)",
+            paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+            font={"color": "#c9d1d9"},
+            height=400,
+            margin=dict(t=50, b=20, l=10, r=10),
+            xaxis=dict(gridcolor="#21262d", title="Gradient × Input"),
+            yaxis=dict(gridcolor="#21262d"),
+        )
+        st.plotly_chart(fig_sal, use_container_width=True)
 
-        elif result and result.get('status') == 'ERROR':
-            st.error(f"Inference Error: {result.get('error')}")
-
-        if lp.is_running:
-            time.sleep(1)
-            st.rerun()
+        st.markdown("### Feature Descriptions")
+        for item in features:
+            feat = item.get("feature", "")
+            desc = FEATURE_EXPLAIN.get(feat, f"Network flow statistic: `{feat}`")
+            st.markdown(f"- **`{feat}`** — {desc}")
+    else:
+        st.info("💡 Start a Live Network Capture first. Saliency data populates here after the first inference.")
+        st.markdown("""
+        ### How Input-Gradient Saliency Works
+        
+        For each prediction, the AI computes:
+        
+        $$\\text{Saliency}_i = \\left| \\frac{\\partial \\hat{y}}{\\partial x_i} \\right| \\cdot |x_i|$$
+        
+        This measures how much a unit change in feature $x_i$ would change the risk prediction $\\hat{y}$.
+        Features with high saliency are the **primary drivers** of the alert — the equivalent of a human
+        analyst saying *"I flagged this because the SYN rate spiked three standard deviations above baseline."*
+        """)

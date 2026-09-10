@@ -19,7 +19,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ class _FocalLoss(nn.Module):
 # Internal nn.Module
 # ---------------------------------------------------------------------------
 class _STGWMNet(nn.Module):
-    def __init__(self, input_dim=25, hidden_dim=32, num_layers=2, num_stages=6):
+    def __init__(self, input_dim=25, hidden_dim=64, num_layers=2, num_stages=6, dropout=0.3):
         super().__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -53,20 +53,22 @@ class _STGWMNet(nn.Module):
         self.num_stages = num_stages
 
         self.lstm = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim,
-                            num_layers=num_layers, batch_first=True)
-        self.norm = nn.LayerNorm(hidden_dim)
+                            num_layers=num_layers, batch_first=True,
+                            dropout=dropout if num_layers > 1 else 0.0)
+        self.norm    = nn.LayerNorm(hidden_dim)
+        self.dropout = nn.Dropout(dropout)
 
         self.dynamics_head = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Dropout(dropout),
             nn.Linear(hidden_dim, input_dim),
         )
         half = hidden_dim // 2
         self.risk_head = nn.Sequential(
-            nn.Linear(hidden_dim, half), nn.ReLU(),
+            nn.Linear(hidden_dim, half), nn.ReLU(), nn.Dropout(dropout),
             nn.Linear(half, 1),
         )
         self.stage_head = nn.Sequential(
-            nn.Linear(hidden_dim, half), nn.ReLU(),
+            nn.Linear(hidden_dim, half), nn.ReLU(), nn.Dropout(dropout),
             nn.Linear(half, num_stages),
         )
 
@@ -80,7 +82,7 @@ class _STGWMNet(nn.Module):
 # Public wrapper
 # ---------------------------------------------------------------------------
 class STGWMModel:
-    def __init__(self, input_dim=25, hidden_dim=32, num_layers=2, num_stages=6):
+    def __init__(self, input_dim=25, hidden_dim=64, num_layers=2, num_stages=6):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -105,10 +107,13 @@ class STGWMModel:
         if scaler is not None:
             self._scaler = scaler
         else:
-            self._scaler = StandardScaler()
+            self._scaler = RobustScaler()
             self._scaler.fit(X.reshape(-1, F))
 
         X_scaled = self._scaler.transform(X.reshape(-1, F)).reshape(N, seq_len, F).astype(np.float32)
+        # Clip scaled values to ±10 to prevent rare extreme outliers from
+        # destabilizing LSTM hidden state (RobustScaler still passes outliers through)
+        X_scaled = np.clip(X_scaled, -10.0, 10.0)
         y_dyn = X_scaled[:, -1, :]
 
         self._net = _STGWMNet(self.input_dim, self.hidden_dim, self.num_layers, self.num_stages).to(device)
@@ -147,6 +152,8 @@ class STGWMModel:
             Xs = Xt[perm]; rs = yt_risk[perm]; ds = yt_dyn[perm]
             if yt_stage is not None:
                 ss = yt_stage[perm]
+            epoch_loss = 0.0
+            n_batches = 0
             for i in range(0, train_size, batch_size):
                 bX = Xs[i:i+batch_size]; br = rs[i:i+batch_size]; bd = ds[i:i+batch_size]
                 dp, rl, sl = self._net(bX)
@@ -157,6 +164,8 @@ class STGWMModel:
                 optimizer.zero_grad(); loss.backward()
                 nn.utils.clip_grad_norm_(self._net.parameters(), 1.0)
                 optimizer.step()
+                epoch_loss += loss.item()
+                n_batches += 1
 
             self._net.eval()
             with torch.no_grad():
@@ -176,8 +185,13 @@ class STGWMModel:
                 best_state = {k: v.clone() for k, v in self._net.state_dict().items()}
                 best_dyn_mse = dyn_mse
                 epochs_no_improve = 0
+                tag = "  [best]"
             else:
                 epochs_no_improve += 1
+                tag = ""
+
+            print(f"  Epoch {ep+1:3d}/{epochs}  train_loss={epoch_loss/max(n_batches,1):.4f}  "
+                  f"val_loss={val_loss:.4f}  no_improve={epochs_no_improve}/{patience}{tag}")
                 
             if epochs_no_improve >= patience:
                 break
@@ -205,7 +219,10 @@ class STGWMModel:
         if X.ndim == 2:
             X = X[:, np.newaxis, :]
         N, seq_len, F = X.shape
-        X_scaled = self._scaler.transform(X.reshape(-1, F)).reshape(N, seq_len, F).astype(np.float32)
+        X_scaled = np.clip(
+            self._scaler.transform(X.reshape(-1, F)).reshape(N, seq_len, F).astype(np.float32),
+            -10.0, 10.0
+        )
         Xt = torch.tensor(X_scaled, dtype=torch.float32)
         self._net.eval()
         with torch.no_grad():
@@ -223,7 +240,7 @@ class STGWMModel:
         if not self._trained:
             raise RuntimeError("Model not trained.")
         seq_len, F = X_context.shape
-        buf = self._scaler.transform(X_context).astype(np.float32)
+        buf = np.clip(self._scaler.transform(X_context).astype(np.float32), -10.0, 10.0)
         risk_traj, stage_traj, dyn_traj = [], [], []
         self._net.eval()
         with torch.no_grad():
