@@ -86,9 +86,9 @@ if model is None:
     st.error("⚠️ **Model weights not found.** Please run `python train_pipeline.py` first.")
     st.stop()
 
-tab1, tab2, tab4 = st.tabs(["📊 CV Benchmarks", "🧠 Saliency & Rollout", "📡 Live Network Capture"])
+page = st.sidebar.radio("Navigation", ["▶️ Live Network Capture", "📊 CV Benchmarks", "🧠 Saliency & Rollout"])
 
-with tab1:
+if page == "📊 CV Benchmarks":
     st.subheader("Model Performance Benchmark")
     df = load_benchmark_data()
     if df is not None:
@@ -103,7 +103,7 @@ with tab1:
     - **World Model over XGBoost:** The baseline pipeline uses a 15-epoch, H=32 under-trained LSTM. By increasing H=64 and epochs=30, the temporal dynamics properly capture state transitions, outperforming tree-based baselines.
     """)
 
-with tab2:
+if page == "🧠 Saliency & Rollout":
     st.info("Run the Live Capture tab (Tab 3) to populate live World Model Rollouts & Saliency here!")
     if st.session_state.live_pipeline and st.session_state.live_pipeline.latest_result:
         result = st.session_state.live_pipeline.latest_result
@@ -115,7 +115,7 @@ with tab2:
             fig2.update_layout(yaxis={'categoryorder':'total ascending'})
             st.plotly_chart(fig2, use_container_width=True)
 
-with tab4:
+if page == "▶️ Live Network Capture":
     st.subheader("📡 Live Network Capture & PCAP Replay")
     st.markdown("Ingests live packets or PCAP files, aggregates via 5-second temporal windows, extracts structural graph features, and queries the trained Spatial-Temporal World Model.")
 
@@ -214,5 +214,6 @@ with tab4:
         elif result and result.get('status') == 'ERROR':
             st.error(f"Inference Error: {result.get('error')}")
 
-        time.sleep(1)
-        st.rerun()
+        if lp.is_running:
+            time.sleep(1)
+            st.rerun()
