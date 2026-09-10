@@ -218,6 +218,33 @@ def run_inference(
     stage_confidence = risk_peak
 
     # ------------------------------------------------------------------
+    # ENTERPRISE SOC HEURISTIC OVERRIDE (False Positive Reduction)
+    # ------------------------------------------------------------------
+    # In real environments, streaming 4K video or downloading huge files 
+    # creates a massive bandwidth spike that looks identical to a DoS attack to a naive AI.
+    # A true DoS (Impact) relies on high connection rates (syn_rate) and tiny packets.
+    # Video streaming uses huge packets (MTU 1500) and low SYN rates.
+    
+    if len(df_features) > 0:
+        latest = df_features.iloc[-1]
+        syn_rate = latest.get("syn_rate", 0)
+        pkt_len_mean = latest.get("pkt_len_mean", 0)
+        
+        # If the network is pushing huge packets with minimal new connections, it is a Benign download.
+        if pkt_len_mean > 500 and syn_rate < 0.05:
+            # Override False Positive
+            risk_peak = min(risk_peak, 0.15)
+            risk_current = min(risk_current, 0.15)
+            peak_stage_idx = 0 # Benign
+            stage_confidence = 0.99
+            
+            # Flatten trajectory to safe levels
+            forecast_risk = [min(r, 0.15) for r in forecast_risk]
+            forecast_stages = [0] * len(forecast_stages)
+            per_window_risk = [min(r, 0.15) for r in per_window_risk]
+            per_window_stage = ["Benign"] * len(per_window_stage)
+
+    # ------------------------------------------------------------------
     # 5. Detect mode
     # ------------------------------------------------------------------
     # Heuristic: if feature_cols contains any pcap-only feature, it's FLOW_AND_PACKET
