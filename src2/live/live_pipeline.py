@@ -4,7 +4,7 @@ import pandas as pd
 from typing import List, Dict
 import scapy.all as scapy
 
-from src2.live.live_aggregator import aggregate_packets
+from src2.live.live_aggregator import aggregate_packets, _empty_features
 from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
 from src2.data.schema import CANONICAL_FEATURES
 from src2.models.inference import run_inference
@@ -20,7 +20,6 @@ class LivePipeline:
         self.window_duration = 5.0
         
         # Pre-fill history with empty windows so it calculates immediately
-        from src2.live.live_aggregator import _empty_features
         for _ in range(self.seq_len):
             self.history.append(_empty_features())
         
@@ -35,7 +34,7 @@ class LivePipeline:
 
     def start(self):
         self.is_running = True
-        self.history = [_empty_features() for _ in range(self.config.get("seq_len", 5))]
+        self.history = [_empty_features() for _ in range(self.seq_len)]
         self.latest_result = None
         self.total_packets = 0
         self.current_window = 0
