@@ -111,7 +111,7 @@ def run_inference(
     df_features,
     feature_cols: list[str],
     seq_len: int = 5,
-    forecast_steps: int = 7,
+    forecast_steps: int = 12,
     model_dir: str = "eval_results",
 ) -> dict:
     """Run the full inference pipeline and return the COMMON JSON CONTRACT dict.

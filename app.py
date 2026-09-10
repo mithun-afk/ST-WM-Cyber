@@ -201,7 +201,7 @@ with st.sidebar:
     st.markdown("**Architecture**")
     st.caption("3-Head LSTM: Risk · Stage · Dynamics")
     st.caption("Input: 25 inductive graph features")
-    st.caption("Forecast horizon: +35 seconds")
+    st.caption("Forecast horizon: +60 seconds")
     st.caption("Window size: 5 seconds")
 
     if model is None:
@@ -214,7 +214,7 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 if page == "▶️ Live Network Capture":
     st.title("📡 Live Network Attack Forecasting")
-    st.markdown("*Real-time packet capture → Spatial-Temporal World Model → 35-second attack trajectory forecast*")
+    st.markdown("*Real-time packet capture → Spatial-Temporal World Model → 60-second attack trajectory forecast*")
     st.markdown("---")
 
     if model is None:
@@ -319,7 +319,7 @@ if page == "▶️ Live Network Capture":
             peak = max(forecast) if forecast else risk
             st.markdown(f"""
             <div class="metric-card">
-                <div class="metric-label">Peak Forecast (+35s)</div>
+                <div class="metric-label">Peak Forecast (+60s)</div>
                 <div class="metric-value" style="color:{risk_color(peak)}">{peak:.1%}</div>
                 <div class="metric-sub">Autoregressive Rollout</div>
             </div>""", unsafe_allow_html=True)
@@ -408,7 +408,7 @@ if page == "▶️ Live Network Capture":
                 fig_fc.add_hrect(y0=0.3, y1=0.6, fillcolor="rgba(210,153,34,0.05)", line_width=0)
                 fig_fc.add_hrect(y0=0.6, y1=1.0, fillcolor="rgba(248,81,73,0.05)", line_width=0)
                 fig_fc.update_layout(
-                    title="35-Second Attack Trajectory Forecast",
+                    title="60-Second Attack Trajectory Forecast",
                     paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
                     height=220, margin=dict(t=40, b=20, l=10, r=10),
                     font={"color": "#c9d1d9"},
@@ -537,12 +537,86 @@ Input: [5 × 25 feature window]
     │         │            │
  P(attack)  MITRE Stage  ŜS_{t+1}
              
-  Autoregressive rollout: feed ŜS_{t+1} back as input for +35s forecast
+  Autoregressive rollout: feed ŜS_{t+1} back as input for +60s forecast
     """, language="text")
 
 # ---------------------------------------------------------------------------
 # PAGE: Feature Saliency
 # ---------------------------------------------------------------------------
+elif page == "?? Feature Saliency":
+    st.title("?? Feature Saliency & Explainability (XAI)")
+    st.markdown("*Detailed Proof-of-Concept for Risk Prediction*")
+    st.markdown("---")
+
+    lp = st.session_state.live_pipeline
+    if lp and lp.latest_result and lp.latest_result.get("important_features"):
+        result = lp.latest_result
+        features = result["important_features"]
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            feat_df = pd.DataFrame(features).rename(columns={"feature": "Feature", "importance": "Saliency"})
+            feat_df = feat_df.sort_values("Saliency", ascending=True)
+
+            fig_sal = go.Figure(go.Bar(
+                x=feat_df["Saliency"],
+                y=feat_df["Feature"],
+                orientation="h",
+                marker=dict(
+                    color=feat_df["Saliency"],
+                    colorscale=[[0, "#3fb950"], [0.5, "#d29922"], [1.0, "#f85149"]],
+                    showscale=True,
+                ),
+            ))
+            fig_sal.update_layout(
+                title="Top 10 Risk-Driving Features",
+                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                font={"color": "#c9d1d9"}, height=400,
+                margin=dict(t=50, b=20, l=10, r=10),
+                xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d"),
+            )
+            st.plotly_chart(fig_sal, use_container_width=True)
+            
+        with col2:
+            st.markdown("### ?? AI Threat Reasoning")
+            st.markdown(f"**Current Risk:** `{result['risk']*100:.1f}%`")
+            st.markdown(f"**MITRE Stage:** `{result['stage']}`")
+            st.markdown("---")
+            if result['risk'] < 0.3:
+                st.success("Network traffic matches benign baseline distribution. No anomalous patterns detected in TCP flags or inter-arrival timings.")
+            else:
+                st.error("MALICIOUS BEHAVIOR DETECTED:")
+                reasoning = []
+                for f in features[:4]: # top 4
+                    name = f["feature"]
+                    if "syn" in name.lower() or "rst" in name.lower():
+                        reasoning.append(f"- **{name}**: High variance indicates potential automated scanning or flood attack.")
+                    elif "iat" in name.lower():
+                        reasoning.append(f"- **{name}**: Abnormal packet timings suggest botnet activity or C2 beaconing.")
+                    elif "win" in name.lower():
+                        reasoning.append(f"- **{name}**: Unusual TCP window sizes often used in OS fingerprinting.")
+                    elif "ratio" in name.lower():
+                        reasoning.append(f"- **{name}**: Asymmetric data transfer implies data exfiltration or dropper downloads.")
+                    else:
+                        reasoning.append(f"- **{name}**: Statistically deviates from established normal baseline.")
+                
+                for r in reasoning:
+                    st.markdown(r)
+                
+                st.markdown("---")
+                st.markdown("**Analyst Recommendation:** Isolate affected subnet and review PCAP logs for associated IP addresses.")
+
+        st.markdown("---")
+        st.markdown("### Mathematics of the Ensemble Forecast")
+        st.latex(r'''
+        \text{Forecast}_{t+h} = \underbrace{\text{LR}(X_{t})}_{\text{Anchor}} + \underbrace{\alpha \cdot \Delta \text{LSTM}_{t+h}}_{\text{Trend}} + \underbrace{\beta \cdot h \cdot \Delta \text{LSTM}_{t+h}}_{\text{Momentum}}
+        ''')
+        st.markdown("The 60-second forecast blends the highly discriminative Logistic Regression anchor with the spatio-temporal dynamics learned by the LSTM, preventing drift while showing trajectory.")
+
+    else:
+        st.info("Start the Live Network Capture to see explainability data.")
+
 elif page == "🧠 Feature Saliency":
     st.title("🧠 Feature Saliency & Explainability")
     st.markdown("*Input-gradient saliency — showing which features drove the latest prediction.*")
