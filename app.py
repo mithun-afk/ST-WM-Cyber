@@ -549,42 +549,45 @@ elif page == "?? Feature Saliency":
     st.markdown("---")
 
     lp = st.session_state.live_pipeline
-    if lp and lp.latest_result and lp.latest_result.get("important_features"):
+    if lp and lp.latest_result is not None:
         result = lp.latest_result
-        features = result["important_features"]
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            feat_df = pd.DataFrame(features).rename(columns={"feature": "Feature", "importance": "Saliency"})
-            feat_df = feat_df.sort_values("Saliency", ascending=True)
-
-            fig_sal = go.Figure(go.Bar(
-                x=feat_df["Saliency"],
-                y=feat_df["Feature"],
-                orientation="h",
-                marker=dict(
-                    color=feat_df["Saliency"],
-                    colorscale=[[0, "#3fb950"], [0.5, "#d29922"], [1.0, "#f85149"]],
-                    showscale=True,
-                ),
-            ))
-            fig_sal.update_layout(
-                title="Top 10 Risk-Driving Features",
-                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                font={"color": "#c9d1d9"}, height=400,
-                margin=dict(t=50, b=20, l=10, r=10),
-                xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d"),
-            )
-            st.plotly_chart(fig_sal, use_container_width=True)
+        features = result.get("important_features", [])
+        if not features:
+            st.success("?? **Traffic is currently completely benign.** There are no anomalous risk-driving features to report at this moment.")
+        else:
             
-        with col2:
-            st.markdown("### ?? AI Threat Reasoning")
-            st.markdown(f"**Current Risk:** `{result['risk']*100:.1f}%`")
-            st.markdown(f"**MITRE Stage:** `{result['stage']}`")
-            st.markdown("---")
-            if result['risk'] < 0.3:
-                st.success("Network traffic matches benign baseline distribution. No anomalous patterns detected in TCP flags or inter-arrival timings.")
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                feat_df = pd.DataFrame(features).rename(columns={"feature": "Feature", "importance": "Saliency"})
+                feat_df = feat_df.sort_values("Saliency", ascending=True)
+
+                fig_sal = go.Figure(go.Bar(
+                    x=feat_df["Saliency"],
+                    y=feat_df["Feature"],
+                    orientation="h",
+                    marker=dict(
+                        color=feat_df["Saliency"],
+                        colorscale=[[0, "#3fb950"], [0.5, "#d29922"], [1.0, "#f85149"]],
+                        showscale=True,
+                    ),
+                ))
+                fig_sal.update_layout(
+                    title="Top 10 Risk-Driving Features",
+                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                    font={"color": "#c9d1d9"}, height=400,
+                    margin=dict(t=50, b=20, l=10, r=10),
+                    xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d"),
+                )
+                st.plotly_chart(fig_sal, use_container_width=True)
+                
+            with col2:
+                st.markdown("### ?? AI Threat Reasoning")
+                st.markdown(f"**Current Risk:** `{result['risk']*100:.1f}%`")
+                st.markdown(f"**MITRE Stage:** `{result['stage']}`")
+                st.markdown("---")
+                if result['risk'] < 0.3:
+                    st.success("Network traffic matches benign baseline distribution. No anomalous patterns detected in TCP flags or inter-arrival timings.")
             else:
                 st.error("MALICIOUS BEHAVIOR DETECTED:")
                 reasoning = []
@@ -616,4 +619,10 @@ elif page == "?? Feature Saliency":
 
     else:
         st.info("Start the Live Network Capture to see explainability data.")
+
+    # Auto-refresh only while capture is running
+    if lp and lp.is_running:
+        import time
+        time.sleep(1)
+        st.rerun()
 
