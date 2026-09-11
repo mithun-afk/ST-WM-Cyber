@@ -552,16 +552,18 @@ elif page == "?? Feature Saliency":
     if lp and lp.latest_result is not None:
         result = lp.latest_result
         features = result.get("important_features", [])
+        
         if not features:
             st.success("?? **Traffic is currently completely benign.** There are no anomalous risk-driving features to report at this moment.")
         else:
-            
             col1, col2 = st.columns([2, 1])
             
             with col1:
+                import pandas as pd
                 feat_df = pd.DataFrame(features).rename(columns={"feature": "Feature", "importance": "Saliency"})
                 feat_df = feat_df.sort_values("Saliency", ascending=True)
 
+                import plotly.graph_objects as go
                 fig_sal = go.Figure(go.Bar(
                     x=feat_df["Saliency"],
                     y=feat_df["Feature"],
@@ -588,27 +590,27 @@ elif page == "?? Feature Saliency":
                 st.markdown("---")
                 if result['risk'] < 0.3:
                     st.success("Network traffic matches benign baseline distribution. No anomalous patterns detected in TCP flags or inter-arrival timings.")
-            else:
-                st.error("MALICIOUS BEHAVIOR DETECTED:")
-                reasoning = []
-                for f in features[:4]: # top 4
-                    name = f["feature"]
-                    if "syn" in name.lower() or "rst" in name.lower():
-                        reasoning.append(f"- **{name}**: High variance indicates potential automated scanning or flood attack.")
-                    elif "iat" in name.lower():
-                        reasoning.append(f"- **{name}**: Abnormal packet timings suggest botnet activity or C2 beaconing.")
-                    elif "win" in name.lower():
-                        reasoning.append(f"- **{name}**: Unusual TCP window sizes often used in OS fingerprinting.")
-                    elif "ratio" in name.lower():
-                        reasoning.append(f"- **{name}**: Asymmetric data transfer implies data exfiltration or dropper downloads.")
-                    else:
-                        reasoning.append(f"- **{name}**: Statistically deviates from established normal baseline.")
-                
-                for r in reasoning:
-                    st.markdown(r)
-                
-                st.markdown("---")
-                st.markdown("**Analyst Recommendation:** Isolate affected subnet and review PCAP logs for associated IP addresses.")
+                else:
+                    st.error("MALICIOUS BEHAVIOR DETECTED:")
+                    reasoning = []
+                    for f in features[:4]:
+                        name = f["feature"]
+                        if "syn" in name.lower() or "rst" in name.lower():
+                            reasoning.append(f"- **{name}**: High variance indicates potential automated scanning or flood attack.")
+                        elif "iat" in name.lower():
+                            reasoning.append(f"- **{name}**: Abnormal packet timings suggest botnet activity or C2 beaconing.")
+                        elif "win" in name.lower():
+                            reasoning.append(f"- **{name}**: Unusual TCP window sizes often used in OS fingerprinting.")
+                        elif "ratio" in name.lower():
+                            reasoning.append(f"- **{name}**: Asymmetric data transfer implies data exfiltration or dropper downloads.")
+                        else:
+                            reasoning.append(f"- **{name}**: Statistically deviates from established normal baseline.")
+                    
+                    for r in reasoning:
+                        st.markdown(r)
+                    
+                    st.markdown("---")
+                    st.markdown("**Analyst Recommendation:** Isolate affected subnet and review PCAP logs for associated IP addresses.")
 
         st.markdown("---")
         st.markdown("### Mathematics of the Ensemble Forecast")
@@ -619,10 +621,9 @@ elif page == "?? Feature Saliency":
 
     else:
         st.info("Start the Live Network Capture to see explainability data.")
-
+        
     # Auto-refresh only while capture is running
     if lp and lp.is_running:
         import time
         time.sleep(1)
         st.rerun()
-
