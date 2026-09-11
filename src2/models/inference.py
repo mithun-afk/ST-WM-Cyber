@@ -244,7 +244,7 @@ def run_inference(
     from src2.intelligence.mitre import match_indicators
 
     df_last = pd.DataFrame(X[:, -1, :], columns=feature_cols)
-    important_features = get_important_features(model, X, feature_cols, top_n=10)
+    important_features = get_important_features(model, lr_scorer, X, feature_cols, top_n=10)
     important_windows  = get_important_windows(per_window_risk_raw, timestamps=timestamps)
     matched_indicators = match_indicators(df_last)
 
