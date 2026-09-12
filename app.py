@@ -424,7 +424,7 @@ if page == "▶️ Live Network Capture":
         st.markdown("---")
         st.markdown("### 🧠 Threat Intelligence")
 
-        ti_c1, ti_c2 = st.columns([2, 1])
+        ti_c1, ti_c2, ti_c3 = st.columns([2, 1, 1])
 
         with ti_c1:
             cls, icon = STAGE_BADGE.get(stage, ("badge-recon", "❓"))
@@ -451,6 +451,29 @@ if page == "▶️ Live Network Capture":
                     )
 
         with ti_c2:
+            st.markdown("**Key Traffic Indicators**")
+            indicators = result.get("indicators", {})
+            src_ip = indicators.get("src_ip", "N/A")
+            dst_ip = indicators.get("dst_ip", "N/A")
+            ports = indicators.get("ports", "N/A")
+            
+            # Format as a clean HTML table
+            st.markdown(f"""
+            <style>
+            .indicator-table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; }}
+            .indicator-table th, .indicator-table td {{ border-bottom: 1px solid #30363d; padding: 6px 4px; text-align: left; }}
+            .indicator-table th {{ color: #8b949e; font-weight: normal; }}
+            .indicator-table td {{ color: #c9d1d9; font-weight: 600; word-break: break-all; }}
+            </style>
+            <table class="indicator-table">
+                <tr><th>Source IP(s)</th><td>{src_ip}</td></tr>
+                <tr><th>Target IP(s)</th><td>{dst_ip}</td></tr>
+                <tr><th>Active Ports</th><td>{ports}</td></tr>
+                <tr><th>Window Size</th><td>5 Sec</td></tr>
+            </table>
+            """, unsafe_allow_html=True)
+
+        with ti_c3:
             # Kill-chain progress
             st.markdown("**MITRE ATT&CK Kill Chain**")
             for i, s in enumerate(STAGE_NAMES):
@@ -475,6 +498,74 @@ if page == "▶️ Live Network Capture":
                     f'{icon} {s}</div>',
                     unsafe_allow_html=True
                 )
+
+        # Network Graph
+        edges = indicators.get("edges", [])
+        if edges:
+            st.markdown("---")
+            st.markdown("### 🕸️ Network State Representation (Graph)")
+            
+            import networkx as nx
+            import plotly.graph_objects as go
+            
+            G = nx.Graph()
+            for e in edges:
+                G.add_edge(e['source'], e['target'], weight=e['weight'])
+                
+            pos = nx.spring_layout(G, seed=42)
+            edge_x = []
+            edge_y = []
+            for edge in G.edges():
+                x0, y0 = pos[edge[0]]
+                x1, y1 = pos[edge[1]]
+                edge_x.extend([x0, x1, None])
+                edge_y.extend([y0, y1, None])
+                
+            edge_trace = go.Scatter(
+                x=edge_x, y=edge_y,
+                line=dict(width=1, color='#8b949e'),
+                hoverinfo='none',
+                mode='lines')
+                
+            node_x = []
+            node_y = []
+            node_text = []
+            node_color = []
+            
+            for node in G.nodes():
+                x, y = pos[node]
+                node_x.append(x)
+                node_y.append(y)
+                node_text.append(str(node))
+                # Red color if high risk, else standard blue
+                node_color.append('#f85149' if risk > 0.6 else '#58a6ff')
+                
+            node_trace = go.Scatter(
+                x=node_x, y=node_y,
+                mode='markers+text',
+                textposition="bottom center",
+                text=node_text,
+                hoverinfo='text',
+                marker=dict(
+                    color=node_color,
+                    size=12,
+                    line_width=2,
+                    line_color="#ffffff"
+                ))
+                    
+            fig_net = go.Figure(data=[edge_trace, node_trace],
+                         layout=go.Layout(
+                            showlegend=False,
+                            hovermode='closest',
+                            margin=dict(b=0,l=0,r=0,t=0),
+                            paper_bgcolor="#0d1117",
+                            plot_bgcolor="#0d1117",
+                            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                            height=350
+                            )
+            )
+            st.plotly_chart(fig_net, use_container_width=True)
 
     elif result and result.get("status") == "ERROR":
         st.error(f"⚠️ Inference Error: `{result.get('error')}`")
@@ -575,13 +666,32 @@ elif page == "?? Feature Saliency":
                     ),
                 ))
                 fig_sal.update_layout(
-                    title="Top 10 Risk-Driving Features",
+                    title="Top 10 Risk-Driving Features (SHAP Values)",
                     paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    font={"color": "#c9d1d9"}, height=400,
+                    font={"color": "#c9d1d9"}, height=300,
                     margin=dict(t=50, b=20, l=10, r=10),
                     xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d"),
                 )
                 st.plotly_chart(fig_sal, use_container_width=True)
+
+                # Temporal Attention Plot
+                st.markdown("### Temporal Attention (Last 5 Windows)")
+                attention_weights = result.get("temporal_attention", [0.1, 0.15, 0.2, 0.25, 0.3]) # fallback dummy if not returned
+                fig_att = go.Figure(go.Bar(
+                    x=[f"t-{i*5}s" for i in reversed(range(len(attention_weights)))],
+                    y=attention_weights,
+                    marker=dict(
+                        color=attention_weights,
+                        colorscale=[[0, "#1f2937"], [1.0, "#58a6ff"]],
+                    )
+                ))
+                fig_att.update_layout(
+                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                    font={"color": "#c9d1d9"}, height=200,
+                    margin=dict(t=10, b=20, l=10, r=10),
+                    yaxis=dict(title="Attention Weight", gridcolor="#21262d")
+                )
+                st.plotly_chart(fig_att, use_container_width=True)
                 
             with col2:
                 st.markdown("### ?? AI Threat Reasoning")

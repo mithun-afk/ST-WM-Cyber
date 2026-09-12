@@ -38,6 +38,10 @@ PCAP_EXTRA_FEATURES: list[str] = [
     "ttl_std",
     "fragment_count",
     "retransmit_count",
+    "tcp_window_mean",
+    "urg_flag_cnt",
+    "payload_dist_mean",
+    "scan_entropy",
 ]
 
 

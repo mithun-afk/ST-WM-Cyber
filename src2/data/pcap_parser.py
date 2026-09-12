@@ -64,6 +64,10 @@ def parse_pcap(path: str | Path) -> tuple[pd.DataFrame | None, str]:
     flow_frags: dict[str, int] = defaultdict(int)
     flow_retx: dict[str, int] = defaultdict(int)
     seen_seq: dict[str, set] = defaultdict(set)
+    flow_tcp_wins: dict[str, list[int]] = defaultdict(list)
+    flow_urgs: dict[str, int] = defaultdict(int)
+    flow_payload_lens: dict[str, list[int]] = defaultdict(list)
+    flow_entropy: dict[str, list[float]] = defaultdict(list)
 
     total_pkts = 0
     ip_pkts = 0
@@ -84,13 +88,33 @@ def parse_pcap(path: str | Path) -> tuple[pd.DataFrame | None, str]:
                 frag_off = ip_layer.frag
                 if int(flags) & 0x1 or frag_off > 0:
                     flow_frags[key] += 1
-                # Retransmit heuristic: repeated TCP seq numbers
+                
+                # Payload length
+                payload_len = len(pkt["IP"].payload)
+                flow_payload_lens[key].append(payload_len)
+                
+                # Scan entropy (payload entropy approximation per packet)
+                if pkt.haslayer("Raw"):
+                    raw_data = bytes(pkt["Raw"])
+                    if len(raw_data) > 0:
+                        counts = np.bincount(np.frombuffer(raw_data, dtype=np.uint8), minlength=256)
+                        probs = counts[counts > 0] / len(raw_data)
+                        entropy = -np.sum(probs * np.log2(probs))
+                        flow_entropy[key].append(entropy)
+                
                 if "TCP" in pkt:
-                    seq = pkt["TCP"].seq
+                    tcp_layer = pkt["TCP"]
+                    seq = tcp_layer.seq
                     if seq in seen_seq[key]:
                         flow_retx[key] += 1
                     else:
                         seen_seq[key].add(seq)
+                        
+                    flow_tcp_wins[key].append(tcp_layer.window)
+                    
+                    if tcp_layer.flags & 0x20:  # URG flag
+                        flow_urgs[key] += 1
+                        
     except Exception as exc:
         logger.warning("Failed to parse PCAP '%s': %s", path, exc)
         return None, "PACKET_DATA_INSUFFICIENT"
@@ -111,6 +135,10 @@ def parse_pcap(path: str | Path) -> tuple[pd.DataFrame | None, str]:
     all_keys = set(flow_ttls)
     for key in all_keys:
         ttls = flow_ttls[key]
+        tcp_wins = flow_tcp_wins[key]
+        payloads = flow_payload_lens[key]
+        entropies = flow_entropy[key]
+        
         rows.append(
             {
                 "flow_key": key,
@@ -118,6 +146,10 @@ def parse_pcap(path: str | Path) -> tuple[pd.DataFrame | None, str]:
                 "ttl_std": float(np.std(ttls)) if len(ttls) > 1 else 0.0,
                 "fragment_count": flow_frags.get(key, 0),
                 "retransmit_count": flow_retx.get(key, 0),
+                "tcp_window_mean": float(np.mean(tcp_wins)) if tcp_wins else 0.0,
+                "urg_flag_cnt": flow_urgs.get(key, 0),
+                "payload_dist_mean": float(np.mean(payloads)) if payloads else 0.0,
+                "scan_entropy": float(np.mean(entropies)) if entropies else 0.0,
             }
         )
 

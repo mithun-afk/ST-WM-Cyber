@@ -222,8 +222,6 @@ __marimo__/
 # Custom
 data/raw/
 dataset/
-eval_results/
-*.pt
 *.pth
 *.pkl
 *.pcap

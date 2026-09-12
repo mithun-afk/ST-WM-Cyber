@@ -36,17 +36,24 @@ def evaluate_model(model, X, y_risk_gt, y_stage_gt=None, threshold=0.5):
     # Binary metrics
     y_pred_bin = (risk_probs >= threshold).astype(int)
     
-    # Handle case where all ground truths might be 0 (e.g., benign-only folds)
+    # Handle case where all ground truths might be 0 (e.g., benign-only folds) or 1
     if len(np.unique(y_risk_gt)) > 1:
         precision = precision_score(y_risk_gt, y_pred_bin, zero_division=0)
         recall = recall_score(y_risk_gt, y_pred_bin, zero_division=0)
         f1 = f1_score(y_risk_gt, y_pred_bin, zero_division=0)
         brier = brier_score_loss(y_risk_gt, risk_probs)
     else:
-        # If only benign traffic, precision/recall/f1 are 0
-        precision = 0.0
-        recall = 0.0
-        f1 = 0.0
+        if y_risk_gt[0] == 0:
+            # If only benign traffic, precision/recall/f1 are 0
+            precision = 0.0
+            recall = 0.0
+            f1 = 0.0
+        else:
+            # If only attack traffic
+            precision = precision_score(y_risk_gt, y_pred_bin, zero_division=0)
+            recall = recall_score(y_risk_gt, y_pred_bin, zero_division=0)
+            f1 = f1_score(y_risk_gt, y_pred_bin, zero_division=0)
+            
         brier = np.mean((risk_probs - y_risk_gt)**2) # manual brier for single class
         
     cm = confusion_matrix(y_risk_gt, y_pred_bin)
