@@ -264,6 +264,7 @@ def run_inference(
         "risk_current": risk_current,
         "threshold": threshold,
         "forecast": forecast_risk,
+        "forecast_stages": [_stage_name(s) for s in forecast_stages],
         "stage": _stage_name(current_stage_idx),
         "stage_confidence": stage_confidence,
         "per_window_risk": per_window_risk_raw,
