@@ -424,9 +424,9 @@ if page == "▶️ Live Network Capture":
         st.markdown("---")
         st.markdown("### 🧠 Threat Intelligence")
 
-        ti_c1, ti_c2, ti_c3 = st.columns([2, 1, 1])
+        tab_ai, tab_indicators, tab_mitre = st.tabs(["🤖 AI Assessment & Saliency", "📊 Key Traffic Indicators", "🛡️ MITRE ATT&CK Mapping"])
 
-        with ti_c1:
+        with tab_ai:
             cls, icon = STAGE_BADGE.get(stage, ("badge-recon", "❓"))
             st.markdown(f"**Detected Stage:** {stage_badge_html(stage)}", unsafe_allow_html=True)
 
@@ -450,8 +450,8 @@ if page == "▶️ Live Network Capture":
                         f"- **`{feat}`** `{bar}` *(importance: {imp:.2f})*  \n  ↳ {desc}"
                     )
 
-        with ti_c2:
-            st.markdown("**Key Traffic Indicators**")
+        with tab_indicators:
+            st.markdown("**Key Traffic Indicators (Current Window)**")
             indicators = result.get("indicators", {})
             src_ip = indicators.get("src_ip", "N/A")
             dst_ip = indicators.get("dst_ip", "N/A")
@@ -460,22 +460,22 @@ if page == "▶️ Live Network Capture":
             # Format as a clean HTML table
             st.markdown(f"""
             <style>
-            .indicator-table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; }}
-            .indicator-table th, .indicator-table td {{ border-bottom: 1px solid #30363d; padding: 6px 4px; text-align: left; }}
-            .indicator-table th {{ color: #8b949e; font-weight: normal; }}
+            .indicator-table {{ width: 100%; border-collapse: collapse; font-size: 0.95rem; margin-top: 10px; }}
+            .indicator-table th, .indicator-table td {{ border-bottom: 1px solid #30363d; padding: 12px 8px; text-align: left; }}
+            .indicator-table th {{ color: #8b949e; font-weight: 500; width: 30%; }}
             .indicator-table td {{ color: #c9d1d9; font-weight: 600; word-break: break-all; }}
             </style>
             <table class="indicator-table">
                 <tr><th>Source IP(s)</th><td>{src_ip}</td></tr>
                 <tr><th>Target IP(s)</th><td>{dst_ip}</td></tr>
                 <tr><th>Active Ports</th><td>{ports}</td></tr>
-                <tr><th>Window Size</th><td>5 Sec</td></tr>
+                <tr><th>Window Size</th><td>5 Seconds</td></tr>
             </table>
             """, unsafe_allow_html=True)
 
-        with ti_c3:
+        with tab_mitre:
             # Kill-chain progress
-            st.markdown("**MITRE ATT&CK Kill Chain**")
+            st.markdown("**MITRE ATT&CK Kill Chain Progression**")
             for i, s in enumerate(STAGE_NAMES):
                 if s == "Benign":
                     continue
@@ -486,16 +486,19 @@ if page == "▶️ Live Network Capture":
                 if is_current:
                     icon = "🔴"
                     color = "#f85149"
+                    weight = "bold"
                 elif is_past:
                     icon = "🟡"
                     color = "#d29922"
+                    weight = "normal"
                 else:
                     icon = "⚪"
                     color = "#484f58"
+                    weight = "normal"
 
                 st.markdown(
-                    f'<div style="color:{color}; padding:2px 0; font-size:0.9rem;">'
-                    f'{icon} {s}</div>',
+                    f'<div style="color:{color}; padding:6px 0; font-size:1.05rem; font-weight:{weight};">'
+                    f'{icon} &nbsp; {s}</div>',
                     unsafe_allow_html=True
                 )
 
@@ -523,7 +526,7 @@ if page == "▶️ Live Network Capture":
                 
             edge_trace = go.Scatter(
                 x=edge_x, y=edge_y,
-                line=dict(width=1, color='#8b949e'),
+                line=dict(width=1.5, color='rgba(139, 148, 158, 0.5)'),
                 hoverinfo='none',
                 mode='lines')
                 
@@ -531,24 +534,30 @@ if page == "▶️ Live Network Capture":
             node_y = []
             node_text = []
             node_color = []
+            node_size = []
             
             for node in G.nodes():
                 x, y = pos[node]
                 node_x.append(x)
                 node_y.append(y)
-                node_text.append(str(node))
+                
+                degree = G.degree(node)
+                node_text.append(f"<b>IP:</b> {node}<br><b>Connections:</b> {degree}")
+                
                 # Red color if high risk, else standard blue
                 node_color.append('#f85149' if risk > 0.6 else '#58a6ff')
+                node_size.append(15 + 5 * degree)
                 
             node_trace = go.Scatter(
                 x=node_x, y=node_y,
                 mode='markers+text',
                 textposition="bottom center",
-                text=node_text,
+                text=[str(n) for n in G.nodes()],
                 hoverinfo='text',
+                hovertext=node_text,
                 marker=dict(
                     color=node_color,
-                    size=12,
+                    size=node_size,
                     line_width=2,
                     line_color="#ffffff"
                 ))
@@ -557,12 +566,12 @@ if page == "▶️ Live Network Capture":
                          layout=go.Layout(
                             showlegend=False,
                             hovermode='closest',
-                            margin=dict(b=0,l=0,r=0,t=0),
+                            margin=dict(b=20,l=20,r=20,t=20),
                             paper_bgcolor="#0d1117",
                             plot_bgcolor="#0d1117",
                             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                            height=350
+                            height=400
                             )
             )
             st.plotly_chart(fig_net, use_container_width=True)
@@ -597,6 +606,64 @@ elif page == "📊 Model Benchmarks":
         )
     else:
         st.warning("No benchmark data found. Run `python train_pipeline.py` to generate benchmarks.")
+
+    st.markdown("---")
+    st.markdown("### 🗃️ Offline Batch Analysis & Evaluation")
+    st.markdown("Upload a ground-truth labeled CSV dataset to synchronously process the entire file and generate an evaluation report.")
+    offline_file = st.file_uploader("Upload Evaluation Dataset", type=["csv"], key="offline_eval_uploader")
+    if offline_file is not None:
+        if st.button("Run Batch Analysis"):
+            with st.spinner("Processing Offline Dataset (Aggregation & Inference)..."):
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+                    tmp.write(offline_file.getvalue())
+                    tmp_path = tmp.name
+                
+                try:
+                    from src2.data.csv_loader import load_and_normalize_csv
+                    from train_pipeline import aggregate_to_windows
+                    from src2.data.temporal_windows import TemporalWindowBuilder
+                    from src2.models.evaluate import evaluate_model
+                    
+                    df, _ = load_and_normalize_csv(tmp_path)
+                    df_proc = engineer_features(df)
+                    windowed = aggregate_to_windows(df_proc, window_sec=5.0)
+                    
+                    for col in ENGINEERED_FEATURE_COLS:
+                        if col not in windowed.columns:
+                            windowed[col] = 0.0
+                            
+                    tb = TemporalWindowBuilder(seq_len=5)
+                    if "binary_label" not in windowed.columns:
+                        st.error("Uploaded CSV is missing ground-truth labels (Label column required for benchmarking).")
+                    else:
+                        X, y_risk, ts = tb.build(windowed, ENGINEERED_FEATURE_COLS)
+                        
+                        # Use model's calibrated threshold if available
+                        thresh = 0.5
+                        thresh_path = os.path.join("eval_results", "calibrated_threshold.json")
+                        if os.path.exists(thresh_path):
+                            import json
+                            with open(thresh_path, "r") as f:
+                                thresh = json.load(f).get("threshold", 0.5)
+                                
+                        metrics = evaluate_model(model, X, y_risk, threshold=thresh)
+                        
+                        st.success(f"Successfully processed {len(windowed)} temporal windows!")
+                        m1, m2, m3, m4 = st.columns(4)
+                        m1.metric("F1 Score", f"{metrics.get('f1', 0.0):.4f}")
+                        m2.metric("Precision", f"{metrics.get('precision', 0.0):.4f}")
+                        m3.metric("Recall", f"{metrics.get('recall', 0.0):.4f}")
+                        m4.metric("False Positive Rate", f"{metrics.get('fpr', 0.0):.4f}")
+                        
+                        cm = metrics.get('confusion_matrix', {})
+                        st.markdown("**Confusion Matrix:**")
+                        st.code(f"True Negatives: {cm.get('tn')} | False Positives: {cm.get('fp')}\nFalse Negatives: {cm.get('fn')} | True Positives: {cm.get('tp')}")
+                        
+                except Exception as e:
+                    import traceback
+                    st.error(f"Failed to process CSV: {e}")
+                    st.code(traceback.format_exc())
 
     st.markdown("---")
     st.markdown("""
