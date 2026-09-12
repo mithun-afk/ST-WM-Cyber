@@ -194,7 +194,7 @@ with st.sidebar:
     st.markdown("### Navigation")
     page = st.radio(
         "",
-        ["▶️ Live Network Capture", "📊 Model Benchmarks", "🧠 Feature Saliency"],
+        ["▶️ Live Network Capture", "📊 Model Benchmarks"],
         label_visibility="collapsed"
     )
     st.markdown("---")
@@ -336,9 +336,10 @@ if page == "▶️ Live Network Capture":
         # ---------------------------------------------------------------
         # Charts row: Risk gauge | Rolling history | Forecast
         # ---------------------------------------------------------------
-        chart_c1, chart_c2, chart_c3 = st.columns([1, 2, 2])
+        top_c1, top_c2, top_c3 = st.columns([1, 2, 1])
 
-        with chart_c1:
+        with top_c1:
+            st.markdown("**Infiltration Probability**")
             # Gauge chart
             fig_gauge = go.Figure(go.Indicator(
                 mode="gauge+number",
@@ -355,45 +356,17 @@ if page == "▶️ Live Network Capture":
                         {"range": [60, 100],"color": "rgba(248,81,73,0.1)"},
                     ],
                     "threshold": {"line": {"color": "#ffffff", "width": 2}, "value": risk * 100},
-                },
-                title={"text": "Risk Score", "font": {"color": "#8b949e", "size": 13}},
+                }
             ))
             fig_gauge.update_layout(
                 paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
-                height=220, margin=dict(t=40, b=10, l=20, r=20),
+                height=220, margin=dict(t=20, b=10, l=20, r=20),
                 font={"color": "#c9d1d9"}
             )
             st.plotly_chart(fig_gauge, use_container_width=True)
 
-        with chart_c2:
-            # Rolling 60-second risk history
-            hist = st.session_state.risk_history
-            x_hist = list(range(-len(hist) + 1, 1))
-            fig_hist = go.Figure()
-            # Color segments by threshold
-            fig_hist.add_trace(go.Scatter(
-                x=x_hist, y=hist,
-                fill="tozeroy",
-                mode="lines",
-                line=dict(color=rc, width=2),
-                fillcolor=f"rgba({','.join(str(int(int(rc[1:], 16) >> shift & 0xff)) for shift in [16,8,0])},0.15)",
-                name="Risk",
-            ))
-            fig_hist.add_hline(y=0.3, line_dash="dot", line_color="#3fb950", annotation_text="Safe", annotation_font_color="#3fb950")
-            fig_hist.add_hline(y=0.6, line_dash="dot", line_color="#d29922", annotation_text="Elevated", annotation_font_color="#d29922")
-            fig_hist.update_layout(
-                title="Rolling Risk History (last 60 windows)",
-                paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                height=220, margin=dict(t=40, b=20, l=10, r=10),
-                font={"color": "#c9d1d9"},
-                yaxis=dict(range=[0, 1], gridcolor="#21262d", title="Risk"),
-                xaxis=dict(gridcolor="#21262d", title="Windows ago"),
-                showlegend=False,
-            )
-            st.plotly_chart(fig_hist, use_container_width=True)
-
-        with chart_c3:
-            # Forecast trajectory
+        with top_c2:
+            st.markdown("**Infiltration Prediction (Next 10 Steps)**")
             if forecast:
                 fx = [f"t+{(i+1)*5}s" for i in range(len(forecast))]
                 fig_fc = go.Figure()
@@ -408,173 +381,141 @@ if page == "▶️ Live Network Capture":
                 fig_fc.add_hrect(y0=0.3, y1=0.6, fillcolor="rgba(210,153,34,0.05)", line_width=0)
                 fig_fc.add_hrect(y0=0.6, y1=1.0, fillcolor="rgba(248,81,73,0.05)", line_width=0)
                 fig_fc.update_layout(
-                    title="60-Second Attack Trajectory Forecast",
                     paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    height=220, margin=dict(t=40, b=20, l=10, r=10),
+                    height=220, margin=dict(t=20, b=20, l=10, r=10),
                     font={"color": "#c9d1d9"},
                     yaxis=dict(range=[0, 1], gridcolor="#21262d", title="Risk Prob"),
                     xaxis=dict(gridcolor="#21262d"),
                     showlegend=False,
                 )
                 st.plotly_chart(fig_fc, use_container_width=True)
+            else:
+                st.info("Gathering history...")
+
+        with top_c3:
+            st.markdown("**MITRE ATT&CK Mapping**")
+            for i, s in enumerate(STAGE_NAMES):
+                if s == "Benign": continue
+                is_current = (s == stage)
+                past_stages = STAGE_NAMES[:STAGE_NAMES.index(stage) + 1] if stage in STAGE_NAMES else []
+                is_past = s in past_stages and not is_current
+
+                if is_current:
+                    icon, color, weight = "🔴", "#f85149", "bold"
+                elif is_past:
+                    icon, color, weight = "🟡", "#d29922", "normal"
+                else:
+                    icon, color, weight = "⚪", "#484f58", "normal"
+
+                st.markdown(
+                    f'<div style="color:{color}; padding:4px 0; font-size:0.95rem; font-weight:{weight};">'
+                    f'{icon} &nbsp; {s}</div>',
+                    unsafe_allow_html=True
+                )
 
         # ---------------------------------------------------------------
-        # Threat Intelligence
+        # Bottom Row
         # ---------------------------------------------------------------
         st.markdown("---")
-        st.markdown("### 🧠 Threat Intelligence")
+        bot_c1, bot_c2, bot_c3 = st.columns([1.5, 1, 1])
 
-        tab_ai, tab_indicators, tab_mitre = st.tabs(["🤖 AI Assessment & Saliency", "📊 Key Traffic Indicators", "🛡️ MITRE ATT&CK Mapping"])
-
-        with tab_ai:
-            cls, icon = STAGE_BADGE.get(stage, ("badge-recon", "❓"))
-            st.markdown(f"**Detected Stage:** {stage_badge_html(stage)}", unsafe_allow_html=True)
-
-            next_move = NEXT_MOVE.get(stage, "Unknown stage.")
-            if stage == "Benign":
-                st.success(f"**AI Assessment:** {next_move}")
-            elif stage in ("Reconnaissance", "Initial Access"):
-                st.warning(f"**AI Assessment:** {next_move}")
+        with bot_c1:
+            st.markdown("**Network State Representation (Graph)**")
+            edges = result.get("indicators", {}).get("edges", [])
+            if edges:
+                import networkx as nx
+                G = nx.Graph()
+                for e in edges:
+                    G.add_edge(e["source"], e["target"], weight=e["weight"])
+                    
+                pos = nx.spring_layout(G, seed=42)
+                edge_x, edge_y = [], []
+                for edge in G.edges():
+                    x0, y0 = pos[edge[0]]
+                    x1, y1 = pos[edge[1]]
+                    edge_x.extend([x0, x1, None])
+                    edge_y.extend([y0, y1, None])
+                    
+                edge_trace = go.Scatter(
+                    x=edge_x, y=edge_y,
+                    line=dict(width=1.5, color="rgba(139, 148, 158, 0.5)"),
+                    hoverinfo="none", mode="lines")
+                    
+                node_x, node_y, node_text, node_color, node_size = [], [], [], [], []
+                for node in G.nodes():
+                    x, y = pos[node]
+                    node_x.append(x); node_y.append(y)
+                    degree = G.degree(node)
+                    node_text.append(f"<b>IP:</b> {node}<br><b>Connections:</b> {degree}")
+                    node_color.append("#f85149" if risk > 0.6 else "#58a6ff")
+                    node_size.append(15 + 5 * degree)
+                    
+                node_trace = go.Scatter(
+                    x=node_x, y=node_y, mode="markers+text",
+                    textposition="bottom center", text=[str(n) for n in G.nodes()],
+                    hoverinfo="text", hovertext=node_text,
+                    marker=dict(color=node_color, size=node_size, line_width=2, line_color="#ffffff")
+                )
+                        
+                fig_net = go.Figure(data=[edge_trace, node_trace],
+                             layout=go.Layout(
+                                showlegend=False, hovermode="closest",
+                                margin=dict(b=10,l=10,r=10,t=10),
+                                paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
+                                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                                height=300
+                                )
+                )
+                st.plotly_chart(fig_net, use_container_width=True)
             else:
-                st.error(f"**AI Assessment:** {next_move}")
+                st.info("No connections mapped yet.")
 
-            # Saliency-driven reasoning
-            if features and risk > 0.20:
-                st.markdown("**Why is the AI raising this alert?**")
-                for item in features[:3]:
-                    feat = item.get("feature", "")
-                    imp = item.get("importance", 0)
-                    desc = FEATURE_EXPLAIN.get(feat, f"Anomalous variance in `{feat}`.")
-                    bar = "█" * int(imp * 20) + "░" * (20 - int(imp * 20))
-                    st.markdown(
-                        f"- **`{feat}`** `{bar}` *(importance: {imp:.2f})*  \n  ↳ {desc}"
-                    )
+        with bot_c2:
+            st.markdown("**Top Contributing Features (SHAP)**")
+            if features:
+                import pandas as pd
+                feat_df = pd.DataFrame(features).rename(columns={"feature": "Feature", "importance": "Saliency"})
+                feat_df = feat_df.sort_values("Saliency", ascending=True).tail(5)
+                fig_sal = go.Figure(go.Bar(
+                    x=feat_df["Saliency"], y=feat_df["Feature"],
+                    orientation="h",
+                    marker=dict(
+                        color=feat_df["Saliency"],
+                        colorscale=[[0, "#3fb950"], [0.5, "#d29922"], [1.0, "#f85149"]],
+                    ),
+                ))
+                fig_sal.update_layout(
+                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                    font={"color": "#c9d1d9"}, height=300,
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d"),
+                )
+                st.plotly_chart(fig_sal, use_container_width=True)
+            else:
+                st.success("Traffic matches benign baseline.")
 
-        with tab_indicators:
-            st.markdown("**Key Traffic Indicators (Current Window)**")
+        with bot_c3:
+            st.markdown("**Key Traffic Indicators**")
             indicators = result.get("indicators", {})
             src_ip = indicators.get("src_ip", "N/A")
             dst_ip = indicators.get("dst_ip", "N/A")
             ports = indicators.get("ports", "N/A")
             
-            # Format as a clean HTML table
             st.markdown(f"""
             <style>
-            .indicator-table {{ width: 100%; border-collapse: collapse; font-size: 0.95rem; margin-top: 10px; }}
-            .indicator-table th, .indicator-table td {{ border-bottom: 1px solid #30363d; padding: 12px 8px; text-align: left; }}
-            .indicator-table th {{ color: #8b949e; font-weight: 500; width: 30%; }}
+            .indicator-table {{ width: 100%; border-collapse: collapse; font-size: 0.95rem; margin-top: 5px; }}
+            .indicator-table th, .indicator-table td {{ border-bottom: 1px solid #30363d; padding: 10px 4px; text-align: left; }}
+            .indicator-table th {{ color: #8b949e; font-weight: 500; width: 40%; }}
             .indicator-table td {{ color: #c9d1d9; font-weight: 600; word-break: break-all; }}
             </style>
             <table class="indicator-table">
                 <tr><th>Source IP(s)</th><td>{src_ip}</td></tr>
                 <tr><th>Target IP(s)</th><td>{dst_ip}</td></tr>
                 <tr><th>Active Ports</th><td>{ports}</td></tr>
-                <tr><th>Window Size</th><td>5 Seconds</td></tr>
+                <tr><th>Window Size</th><td>5 Sec</td></tr>
             </table>
             """, unsafe_allow_html=True)
-
-        with tab_mitre:
-            # Kill-chain progress
-            st.markdown("**MITRE ATT&CK Kill Chain Progression**")
-            for i, s in enumerate(STAGE_NAMES):
-                if s == "Benign":
-                    continue
-                is_current = (s == stage)
-                past_stages = STAGE_NAMES[:STAGE_NAMES.index(stage) + 1] if stage in STAGE_NAMES else []
-                is_past = s in past_stages and not is_current
-
-                if is_current:
-                    icon = "🔴"
-                    color = "#f85149"
-                    weight = "bold"
-                elif is_past:
-                    icon = "🟡"
-                    color = "#d29922"
-                    weight = "normal"
-                else:
-                    icon = "⚪"
-                    color = "#484f58"
-                    weight = "normal"
-
-                st.markdown(
-                    f'<div style="color:{color}; padding:6px 0; font-size:1.05rem; font-weight:{weight};">'
-                    f'{icon} &nbsp; {s}</div>',
-                    unsafe_allow_html=True
-                )
-
-        # Network Graph
-        edges = indicators.get("edges", [])
-        if edges:
-            st.markdown("---")
-            st.markdown("### 🕸️ Network State Representation (Graph)")
-            
-            import networkx as nx
-            import plotly.graph_objects as go
-            
-            G = nx.Graph()
-            for e in edges:
-                G.add_edge(e['source'], e['target'], weight=e['weight'])
-                
-            pos = nx.spring_layout(G, seed=42)
-            edge_x = []
-            edge_y = []
-            for edge in G.edges():
-                x0, y0 = pos[edge[0]]
-                x1, y1 = pos[edge[1]]
-                edge_x.extend([x0, x1, None])
-                edge_y.extend([y0, y1, None])
-                
-            edge_trace = go.Scatter(
-                x=edge_x, y=edge_y,
-                line=dict(width=1.5, color='rgba(139, 148, 158, 0.5)'),
-                hoverinfo='none',
-                mode='lines')
-                
-            node_x = []
-            node_y = []
-            node_text = []
-            node_color = []
-            node_size = []
-            
-            for node in G.nodes():
-                x, y = pos[node]
-                node_x.append(x)
-                node_y.append(y)
-                
-                degree = G.degree(node)
-                node_text.append(f"<b>IP:</b> {node}<br><b>Connections:</b> {degree}")
-                
-                # Red color if high risk, else standard blue
-                node_color.append('#f85149' if risk > 0.6 else '#58a6ff')
-                node_size.append(15 + 5 * degree)
-                
-            node_trace = go.Scatter(
-                x=node_x, y=node_y,
-                mode='markers+text',
-                textposition="bottom center",
-                text=[str(n) for n in G.nodes()],
-                hoverinfo='text',
-                hovertext=node_text,
-                marker=dict(
-                    color=node_color,
-                    size=node_size,
-                    line_width=2,
-                    line_color="#ffffff"
-                ))
-                    
-            fig_net = go.Figure(data=[edge_trace, node_trace],
-                         layout=go.Layout(
-                            showlegend=False,
-                            hovermode='closest',
-                            margin=dict(b=20,l=20,r=20,t=20),
-                            paper_bgcolor="#0d1117",
-                            plot_bgcolor="#0d1117",
-                            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                            height=400
-                            )
-            )
-            st.plotly_chart(fig_net, use_container_width=True)
 
     elif result and result.get("status") == "ERROR":
         st.error(f"⚠️ Inference Error: `{result.get('error')}`")
@@ -607,63 +548,7 @@ elif page == "📊 Model Benchmarks":
     else:
         st.warning("No benchmark data found. Run `python train_pipeline.py` to generate benchmarks.")
 
-    st.markdown("---")
-    st.markdown("### 🗃️ Offline Batch Analysis & Evaluation")
-    st.markdown("Upload a ground-truth labeled CSV dataset to synchronously process the entire file and generate an evaluation report.")
-    offline_file = st.file_uploader("Upload Evaluation Dataset", type=["csv"], key="offline_eval_uploader")
-    if offline_file is not None:
-        if st.button("Run Batch Analysis"):
-            with st.spinner("Processing Offline Dataset (Aggregation & Inference)..."):
-                import tempfile
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
-                    tmp.write(offline_file.getvalue())
-                    tmp_path = tmp.name
-                
-                try:
-                    from src2.data.csv_loader import load_and_normalize_csv
-                    from train_pipeline import aggregate_to_windows
-                    from src2.data.temporal_windows import TemporalWindowBuilder
-                    from src2.models.evaluate import evaluate_model
-                    
-                    df, _ = load_and_normalize_csv(tmp_path)
-                    df_proc = engineer_features(df)
-                    windowed = aggregate_to_windows(df_proc, window_sec=5.0)
-                    
-                    for col in ENGINEERED_FEATURE_COLS:
-                        if col not in windowed.columns:
-                            windowed[col] = 0.0
-                            
-                    tb = TemporalWindowBuilder(seq_len=5)
-                    if "binary_label" not in windowed.columns:
-                        st.error("Uploaded CSV is missing ground-truth labels (Label column required for benchmarking).")
-                    else:
-                        X, y_risk, ts = tb.build(windowed, ENGINEERED_FEATURE_COLS)
-                        
-                        # Use model's calibrated threshold if available
-                        thresh = 0.5
-                        thresh_path = os.path.join("eval_results", "calibrated_threshold.json")
-                        if os.path.exists(thresh_path):
-                            import json
-                            with open(thresh_path, "r") as f:
-                                thresh = json.load(f).get("threshold", 0.5)
-                                
-                        metrics = evaluate_model(model, X, y_risk, threshold=thresh)
-                        
-                        st.success(f"Successfully processed {len(windowed)} temporal windows!")
-                        m1, m2, m3, m4 = st.columns(4)
-                        m1.metric("F1 Score", f"{metrics.get('f1', 0.0):.4f}")
-                        m2.metric("Precision", f"{metrics.get('precision', 0.0):.4f}")
-                        m3.metric("Recall", f"{metrics.get('recall', 0.0):.4f}")
-                        m4.metric("False Positive Rate", f"{metrics.get('fpr', 0.0):.4f}")
-                        
-                        cm = metrics.get('confusion_matrix', {})
-                        st.markdown("**Confusion Matrix:**")
-                        st.code(f"True Negatives: {cm.get('tn')} | False Positives: {cm.get('fp')}\nFalse Negatives: {cm.get('fn')} | True Positives: {cm.get('tp')}")
-                        
-                except Exception as e:
-                    import traceback
-                    st.error(f"Failed to process CSV: {e}")
-                    st.code(traceback.format_exc())
+
 
     st.markdown("---")
     st.markdown("""
@@ -698,109 +583,3 @@ Input: [5 × 25 feature window]
   Autoregressive rollout: feed ŜS_{t+1} back as input for +60s forecast
     """, language="text")
 
-# ---------------------------------------------------------------------------
-# PAGE: Feature Saliency
-# ---------------------------------------------------------------------------
-elif page == "?? Feature Saliency":
-    st.title("?? Feature Saliency & Explainability (XAI)")
-    st.markdown("*Detailed Proof-of-Concept for Risk Prediction*")
-    st.markdown("---")
-
-    lp = st.session_state.live_pipeline
-    if lp and lp.latest_result is not None:
-        result = lp.latest_result
-        features = result.get("important_features", [])
-        
-        if not features:
-            st.success("?? **Traffic is currently completely benign.** There are no anomalous risk-driving features to report at this moment.")
-        else:
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                import pandas as pd
-                feat_df = pd.DataFrame(features).rename(columns={"feature": "Feature", "importance": "Saliency"})
-                feat_df = feat_df.sort_values("Saliency", ascending=True)
-
-                import plotly.graph_objects as go
-                fig_sal = go.Figure(go.Bar(
-                    x=feat_df["Saliency"],
-                    y=feat_df["Feature"],
-                    orientation="h",
-                    marker=dict(
-                        color=feat_df["Saliency"],
-                        colorscale=[[0, "#3fb950"], [0.5, "#d29922"], [1.0, "#f85149"]],
-                        showscale=True,
-                    ),
-                ))
-                fig_sal.update_layout(
-                    title="Top 10 Risk-Driving Features (SHAP Values)",
-                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    font={"color": "#c9d1d9"}, height=300,
-                    margin=dict(t=50, b=20, l=10, r=10),
-                    xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d"),
-                )
-                st.plotly_chart(fig_sal, use_container_width=True)
-
-                # Temporal Attention Plot
-                st.markdown("### Temporal Attention (Last 5 Windows)")
-                attention_weights = result.get("temporal_attention", [0.1, 0.15, 0.2, 0.25, 0.3]) # fallback dummy if not returned
-                fig_att = go.Figure(go.Bar(
-                    x=[f"t-{i*5}s" for i in reversed(range(len(attention_weights)))],
-                    y=attention_weights,
-                    marker=dict(
-                        color=attention_weights,
-                        colorscale=[[0, "#1f2937"], [1.0, "#58a6ff"]],
-                    )
-                ))
-                fig_att.update_layout(
-                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    font={"color": "#c9d1d9"}, height=200,
-                    margin=dict(t=10, b=20, l=10, r=10),
-                    yaxis=dict(title="Attention Weight", gridcolor="#21262d")
-                )
-                st.plotly_chart(fig_att, use_container_width=True)
-                
-            with col2:
-                st.markdown("### ?? AI Threat Reasoning")
-                st.markdown(f"**Current Risk:** `{result['risk']*100:.1f}%`")
-                st.markdown(f"**MITRE Stage:** `{result['stage']}`")
-                st.markdown("---")
-                if result['risk'] < 0.3:
-                    st.success("Network traffic matches benign baseline distribution. No anomalous patterns detected in TCP flags or inter-arrival timings.")
-                else:
-                    st.error("MALICIOUS BEHAVIOR DETECTED:")
-                    reasoning = []
-                    for f in features[:4]:
-                        name = f["feature"]
-                        if "syn" in name.lower() or "rst" in name.lower():
-                            reasoning.append(f"- **{name}**: High variance indicates potential automated scanning or flood attack.")
-                        elif "iat" in name.lower():
-                            reasoning.append(f"- **{name}**: Abnormal packet timings suggest botnet activity or C2 beaconing.")
-                        elif "win" in name.lower():
-                            reasoning.append(f"- **{name}**: Unusual TCP window sizes often used in OS fingerprinting.")
-                        elif "ratio" in name.lower():
-                            reasoning.append(f"- **{name}**: Asymmetric data transfer implies data exfiltration or dropper downloads.")
-                        else:
-                            reasoning.append(f"- **{name}**: Statistically deviates from established normal baseline.")
-                    
-                    for r in reasoning:
-                        st.markdown(r)
-                    
-                    st.markdown("---")
-                    st.markdown("**Analyst Recommendation:** Isolate affected subnet and review PCAP logs for associated IP addresses.")
-
-        st.markdown("---")
-        st.markdown("### Mathematics of the Ensemble Forecast")
-        st.latex(r'''
-        \text{Forecast}_{t+h} = \underbrace{\text{LR}(X_{t})}_{\text{Anchor}} + \underbrace{\alpha \cdot \Delta \text{LSTM}_{t+h}}_{\text{Trend}} + \underbrace{\beta \cdot h \cdot \Delta \text{LSTM}_{t+h}}_{\text{Momentum}}
-        ''')
-        st.markdown("The 60-second forecast blends the highly discriminative Logistic Regression anchor with the spatio-temporal dynamics learned by the LSTM, preventing drift while showing trajectory.")
-
-    else:
-        st.info("Start the Live Network Capture to see explainability data.")
-        
-    # Auto-refresh only while capture is running
-    if lp and lp.is_running:
-        import time
-        time.sleep(1)
-        st.rerun()
