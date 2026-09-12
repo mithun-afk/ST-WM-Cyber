@@ -444,7 +444,7 @@ if page == "▶️ Live Network Capture":
             st.plotly_chart(fig_hist, use_container_width=True)
 
         with mid_c2:
-            st.markdown("**AI Threat Reasoning & Analyst Actions**")
+            st.markdown("**Automated Threat Reasoning & Analyst Actions**")
             next_move = NEXT_MOVE.get(stage, "Unknown stage.")
             MOTIVES = {
                 "Reconnaissance": "Endpoint enumeration, port scanning, or vulnerability discovery.",
@@ -455,14 +455,14 @@ if page == "▶️ Live Network Capture":
             }
             motive = MOTIVES.get(stage, "Unknown objective.")
             if stage == "Benign":
-                st.success(f"**AI Assessment:** {next_move}")
+                st.success(f"**System Assessment:** {next_move}")
             elif stage in ("Reconnaissance", "Initial Access"):
                 st.warning(f"**Predicted Motive:** {motive}<br>**Action:** {next_move}", icon="⚠️")
             else:
                 st.error(f"**Predicted Motive:** {motive}<br>**Action:** {next_move}", icon="🚨")
             
             if features and risk > 0.3:
-                st.markdown("**Why was this flagged? (Explainable AI)**")
+                st.markdown("**Why was this flagged? (Explainability)**")
                 for item in features[:3]:
                     feat = item.get("feature", "")
                     imp = item.get("importance", 0)
