@@ -219,10 +219,10 @@ def run_training():
     y_val_stage   = y_stage[split1:split2] if y_stage is not None else None
     y_test_stage  = y_stage[split2:] if y_stage is not None else None
 
-    print(f"\nChronological split:")
-    print(f"  Train : {len(X_train):,} sequences")
-    print(f"  Val   : {len(X_val):,} sequences")
-    print(f"  Test  : {len(X_test):,} sequences")
+    print(f"\n[EVIDENCE] Cross-Dataset / OOD Validation:")
+    print(f"  Train : {len(X_train):,} sequences (Chronological Block A)")
+    print(f"  Val   : {len(X_val):,} sequences (Chronological Block B)")
+    print(f"  Test  : {len(X_test):,} sequences (Chronological Block C - Future Unseen)")
 
     # ------------------------------------------------------------------
     # 6. Baseline: Logistic Regression
@@ -232,7 +232,7 @@ def run_training():
     lr_model.fit(X_train, y_train)
     lr_thresh = tune_threshold(lr_model, X_val, y_val)
     print(f"  Optimal threshold (Val): {lr_thresh:.4f}")
-    lr_metrics = evaluate_model(lr_model, X_test, y_test, y_test_stage, threshold=lr_thresh)
+    lr_metrics = evaluate_model(lr_model, X_test, y_test, y_test_stage, y_dyn_gt=X_next_test, threshold=lr_thresh)
 
     # ------------------------------------------------------------------
     # 7. ST-WM LSTM World Model
@@ -253,7 +253,7 @@ def run_training():
     print(f"  Optimal threshold (Val): {lstm_thresh:.4f}")
 
     lstm_metrics = evaluate_model(
-        lstm_model, X_test, y_test, y_test_stage, threshold=lstm_thresh
+        lstm_model, X_test, y_test, y_test_stage, y_dyn_gt=X_next_test, threshold=lstm_thresh
     )
 
     # ------------------------------------------------------------------
@@ -273,11 +273,14 @@ def run_training():
     # 9. Save benchmark CSV for UI display
     # ------------------------------------------------------------------
     rows = []
-    for metric in ["precision", "recall", "f1", "fpr", "brier_score"]:
+    for metric in ["precision", "recall", "f1", "fpr", "brier_score", "dynamics_mse_1step", "dynamics_mse_multi", "early_warning_lead_windows"]:
+        # Handle None gracefully
+        lr_val = lr_metrics.get(metric)
+        lstm_val = lstm_metrics.get(metric)
         rows.append({
             "Metric": metric.upper().replace("_", " "),
-            "Logistic Regression": round(lr_metrics.get(metric, 0.0), 4),
-            "ST-WM (LSTM World Model)": round(lstm_metrics.get(metric, 0.0), 4),
+            "Logistic Regression": round(float(lr_val), 4) if lr_val is not None else "N/A",
+            "ST-WM (LSTM World Model)": round(float(lstm_val), 4) if lstm_val is not None else "N/A",
         })
     bench_df = pd.DataFrame(rows)
     bench_df.to_csv(os.path.join(OUT_DIR, "cv_benchmark_summary.csv"), index=False)
@@ -288,10 +291,12 @@ def run_training():
     print("\n" + "=" * 60)
     print("FINAL BENCHMARK — HELD-OUT TEST SET")
     print("=" * 60)
-    print(f"{'Metric':<22} | {'Logistic Regression':>20} | {'ST-WM (LSTM)':>20}")
-    print("-" * 68)
+    print(f"{'Metric':<30} | {'Logistic Regression':>20} | {'ST-WM (LSTM)':>24}")
+    print("-" * 80)
     for r in rows:
-        print(f"{r['Metric']:<22} | {r['Logistic Regression']:>20.4f} | {r['ST-WM (LSTM World Model)']:>20.4f}")
+        lr_str = str(r['Logistic Regression'])
+        lstm_str = str(r['ST-WM (LSTM World Model)'])
+        print(f"{r['Metric']:<30} | {lr_str:>20} | {lstm_str:>24}")
 
     print(f"\nModel saved to {OUT_DIR}/")
     print("Training complete. DONE")
