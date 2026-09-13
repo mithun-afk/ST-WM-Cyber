@@ -96,7 +96,7 @@ class STGWMModel:
     def status(self):
         return "TRAINED" if self._trained else "NOT_TRAINED"
 
-    def fit(self, X, y_risk, y_stage=None, scaler=None, epochs=20, patience=3,
+    def fit(self, X, y_risk, y_dyn=None, y_stage=None, scaler=None, epochs=20, patience=3,
             batch_size=256, lr=1e-3, device="cpu"):
         if X.ndim == 2:
             X = X[:, np.newaxis, :]
@@ -114,7 +114,12 @@ class STGWMModel:
         # Clip scaled values to ±10 to prevent rare extreme outliers from
         # destabilizing LSTM hidden state (RobustScaler still passes outliers through)
         X_scaled = np.clip(X_scaled, -10.0, 10.0)
-        y_dyn = X_scaled[:, -1, :]
+        
+        if y_dyn is not None:
+            y_dyn_scaled = self._scaler.transform(y_dyn).astype(np.float32)
+            y_dyn_scaled = np.clip(y_dyn_scaled, -10.0, 10.0)
+        else:
+            y_dyn_scaled = X_scaled[:, -1, :]
 
         self._net = _STGWMNet(self.input_dim, self.hidden_dim, self.num_layers, self.num_stages).to(device)
         focal = _FocalLoss(alpha=0.75, gamma=2.0)
@@ -127,8 +132,8 @@ class STGWMModel:
         Xv = torch.tensor(X_scaled[split:], dtype=torch.float32, device=device)
         yt_risk = torch.tensor(y_risk[:split], dtype=torch.float32, device=device)
         yv_risk = torch.tensor(y_risk[split:], dtype=torch.float32, device=device)
-        yt_dyn = torch.tensor(y_dyn[:split], dtype=torch.float32, device=device)
-        yv_dyn = torch.tensor(y_dyn[split:], dtype=torch.float32, device=device)
+        yt_dyn = torch.tensor(y_dyn_scaled[:split], dtype=torch.float32, device=device)
+        yv_dyn = torch.tensor(y_dyn_scaled[split:], dtype=torch.float32, device=device)
 
         if y_stage is not None:
             yt_stage = torch.tensor(y_stage[:split], dtype=torch.long, device=device)

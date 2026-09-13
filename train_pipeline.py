@@ -84,14 +84,27 @@ def aggregate_to_windows(df: pd.DataFrame, window_sec: float = 5.0) -> pd.DataFr
     if "binary_label" in df.columns:
         agg_dict["binary_label"] = "max"
 
-    windowed = df.groupby("_bucket").agg(agg_dict).reset_index(drop=True)
+    windowed = df.groupby("_bucket").agg(agg_dict)
+
+    # ------------------------------------------------------------------
+    # Fixed Temporal Grid Fix: Reindex to explicitly include empty windows
+    # ------------------------------------------------------------------
+    max_bucket = int(windowed.index.max()) if len(windowed) > 0 else 0
+    full_index = pd.Index(range(max_bucket + 1), name="_bucket")
+    windowed = windowed.reindex(full_index)
+    
+    # Fill gaps: 0.0 for counts/bytes, baseline for others if needed. For now 0.0 is safe.
+    # Note: A true idle baseline can be imported from live_aggregator if desired.
+    windowed = windowed.fillna(0.0)
+    windowed = windowed.reset_index(drop=True)
 
     # Preserve stage_idx if present (majority vote within window)
     if "stage_idx" in df.columns:
         stage_per_bucket = df.groupby("_bucket")["stage_idx"].agg(
             lambda x: x.value_counts().index[0]
-        ).reset_index(drop=True)
-        windowed["stage_idx"] = stage_per_bucket
+        )
+        stage_per_bucket = stage_per_bucket.reindex(full_index).fillna(0) # 0 = Benign
+        windowed["stage_idx"] = stage_per_bucket.reset_index(drop=True)
 
     # Recalculate ratio features that are distorted by averaging
     if "fwd_pkts" in windowed.columns and "bwd_pkts" in windowed.columns:
@@ -178,7 +191,7 @@ def run_training():
         df_windowed["binary_label"] = 0.0
 
     try:
-        X, y_risk, ts = tb.build(df_windowed, ENGINEERED_FEATURE_COLS)
+        X, X_next, y_risk, ts = tb.build(df_windowed, ENGINEERED_FEATURE_COLS)
     except ValueError as e:
         print(f"ERROR building windows: {e}")
         sys.exit(1)
@@ -197,6 +210,10 @@ def run_training():
     X_train, y_train = X[:split1], y_risk[:split1]
     X_val,   y_val   = X[split1:split2], y_risk[split1:split2]
     X_test,  y_test  = X[split2:], y_risk[split2:]
+    
+    X_next_train = X_next[:split1]
+    X_next_val = X_next[split1:split2]
+    X_next_test = X_next[split2:]
 
     y_train_stage = y_stage[:split1] if y_stage is not None else None
     y_val_stage   = y_stage[split1:split2] if y_stage is not None else None
@@ -224,6 +241,7 @@ def run_training():
     lstm_model = STGWMModel(input_dim=len(ENGINEERED_FEATURE_COLS))
     log = lstm_model.fit(
         X_train, y_train,
+        y_dyn=X_next_train,
         y_stage=y_train_stage,
         epochs=EPOCHS,
         patience=5

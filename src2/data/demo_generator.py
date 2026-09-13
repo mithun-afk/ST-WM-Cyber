@@ -42,6 +42,12 @@ _FEATURE_DEFAULTS = {
     "active_mean":        1000,
     "idle_mean":          3000,
     "down_up_ratio":      1.0,
+    "ttl_mean":           64.0,
+    "ttl_std":            0.0,
+    "fragment_count":     0.0,
+    "retransmit_count":   0.0,
+    "unique_dst_ips":     1.0,
+    "unique_dst_ports":   1.0,
 }
 
 

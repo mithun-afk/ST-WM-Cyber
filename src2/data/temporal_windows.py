@@ -25,7 +25,7 @@ class TemporalWindowBuilder:
         df: pd.DataFrame,
         feature_cols: list[str],
         label_col: str = "binary_label",
-    ) -> tuple[np.ndarray, np.ndarray, list]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list]:
         """Create sliding windows from a chronologically-ordered DataFrame.
 
         Parameters
@@ -40,6 +40,7 @@ class TemporalWindowBuilder:
         Returns
         -------
         X : np.ndarray  shape (N, seq_len, F)  dtype float32
+        X_next : np.ndarray shape (N, F) dtype float32 - features at t+1
         y_risk : np.ndarray  shape (N,)  dtype float32  — label at t+1
         timestamps : list  — timestamp (or index) at t+1 for each window
         """
@@ -65,15 +66,18 @@ class TemporalWindowBuilder:
             ts_arr = list(df.index)
 
         X_list: list[np.ndarray] = []
+        X_next_list: list[np.ndarray] = []
         y_list: list[float] = []
         ts_list: list = []
 
         # Slide window: window = [i : i+seq_len], target = i+seq_len
         for i in range(n - self.seq_len):
             X_list.append(feature_arr[i : i + self.seq_len])
+            X_next_list.append(feature_arr[i + self.seq_len])
             y_list.append(label_arr[i + self.seq_len])
             ts_list.append(ts_arr[i + self.seq_len])
 
         X = np.stack(X_list, axis=0).astype(np.float32)          # (N, seq_len, F)
+        X_next = np.stack(X_next_list, axis=0).astype(np.float32) # (N, F)
         y_risk = np.array(y_list, dtype=np.float32)               # (N,)
-        return X, y_risk, ts_list
+        return X, X_next, y_risk, ts_list

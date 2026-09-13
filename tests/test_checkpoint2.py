@@ -35,13 +35,13 @@ def demo_df():
 @pytest.fixture(scope="module")
 def windows(demo_df):
     builder = TemporalWindowBuilder(seq_len=5)
-    X, y_risk, ts = builder.build(demo_df, ENGINEERED_FEATURE_COLS)
-    return X, y_risk, ts
+    X, X_next, y_risk, ts = builder.build(demo_df, ENGINEERED_FEATURE_COLS)
+    return X, X_next, y_risk, ts
 
 
 @pytest.fixture(scope="module")
 def trained_model(demo_df):
-    model = STGWMModel(input_dim=25, hidden_dim=32, num_layers=2, num_stages=6)
+    model = STGWMModel(input_dim=31, hidden_dim=32, num_layers=2, num_stages=6)
     log = model.fit(
         demo_df[ENGINEERED_FEATURE_COLS].values,
         demo_df["binary_label"].values,
@@ -54,9 +54,9 @@ def trained_model(demo_df):
 # test_model_forward_shape
 # ---------------------------------------------------------------------------
 def test_model_forward_shape():
-    net = _STGWMNet(input_dim=25, hidden_dim=32, num_layers=2, num_stages=6)
+    net = _STGWMNet(input_dim=31, hidden_dim=32, num_layers=2, num_stages=6)
     net.eval()
-    B, seq_len, F = 8, 5, 25
+    B, seq_len, F = 8, 5, 31
     x = torch.randn(B, seq_len, F)
     with torch.no_grad():
         dyn, risk, stage = net(x)
@@ -81,7 +81,7 @@ def test_model_fit_demo(trained_model):
 # ---------------------------------------------------------------------------
 def test_model_predict_shape(trained_model, windows):
     model, _ = trained_model
-    X, _, _ = windows
+    X, _, _, _ = windows
     out = model.predict(X)
     assert "risk_prob" in out
     assert len(out["risk_prob"]) == len(X), (
@@ -89,7 +89,7 @@ def test_model_predict_shape(trained_model, windows):
     )
     assert out["risk_prob"].ndim == 1
     assert out["stage_idx"].shape == (len(X),)
-    assert out["dynamics_pred"].shape == (len(X), 25)
+    assert out["dynamics_pred"].shape == (len(X), 31)
 
 
 # ---------------------------------------------------------------------------
@@ -97,8 +97,8 @@ def test_model_predict_shape(trained_model, windows):
 # ---------------------------------------------------------------------------
 def test_model_forecast_steps(trained_model, windows):
     model, _ = trained_model
-    X, _, _ = windows
-    X_context = X[-1]   # (seq_len=5, F=25)
+    X, _, _, _ = windows
+    X_context = X[-1]   # (seq_len=5, F=31)
     fc = model.forecast(X_context, steps=7)
     assert "risk_trajectory" in fc
     assert len(fc["risk_trajectory"]) == 7, (
@@ -113,7 +113,7 @@ def test_model_forecast_steps(trained_model, windows):
 # ---------------------------------------------------------------------------
 def test_model_save_load(trained_model, windows):
     model, _ = trained_model
-    X, _, _ = windows
+    X, _, _, _ = windows
     orig_preds = model.predict(X)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -159,7 +159,7 @@ def test_inference_api_ok(trained_model, demo_df):
 # test_inference_api_not_trained
 # ---------------------------------------------------------------------------
 def test_inference_api_not_trained(demo_df):
-    untrained = STGWMModel(input_dim=25)
+    untrained = STGWMModel(input_dim=31)
     result = run_inference(untrained, demo_df, ENGINEERED_FEATURE_COLS)
     assert result["error"] == "MODEL_NOT_TRAINED"
 
@@ -181,7 +181,7 @@ def test_inference_api_insufficient(trained_model, demo_df):
 # ---------------------------------------------------------------------------
 def test_forecast_is_list_of_floats(trained_model, windows):
     model, _ = trained_model
-    X, _, _ = windows
+    X, _, _, _ = windows
     fc = model.forecast(X[-1], steps=7)
     for val in fc["risk_trajectory"]:
         assert isinstance(val, float), f"Expected float, got {type(val)}"

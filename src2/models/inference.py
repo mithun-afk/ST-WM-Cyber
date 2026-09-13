@@ -160,7 +160,7 @@ def run_inference(
 
     try:
         builder = TemporalWindowBuilder(seq_len=seq_len)
-        X, y_risk_gt, timestamps = builder.build(df_work, feature_cols)
+        X, X_next, y_risk_gt, timestamps = builder.build(df_work, feature_cols)
     except Exception as e:
         return _make_error(f"BUILD_ERROR: {str(e)}")
 
@@ -177,17 +177,19 @@ def run_inference(
     lr_scorer = _load_lr_scorer(model_dir)
     threshold = _load_calibrated_threshold(model_dir)
 
+    preds = model.predict(X)
+
     if lr_scorer is not None and hasattr(lr_scorer, 'predict_proba'):
-        # Use LR for per-window risk probability (discriminative, calibrated)
-        X_flat = X.reshape(len(X), -1)
-        per_window_risk_raw = [float(p) for p in lr_scorer.predict_proba(X_flat)[:, 1]]
+        X_flat = X.reshape(n_windows, -1)
+        try:
+            per_window_risk_raw = [float(p) for p in lr_scorer.predict_proba(X_flat)[:, 1]]
+        except Exception as e:
+            print(f"LR Scorer error (likely feature dim mismatch): {e}")
+            per_window_risk_raw = [float(p) for p in preds["risk_prob"]]
     else:
-        # Fallback to LSTM if LR not available
-        preds_raw = model.predict(X)
-        per_window_risk_raw = [float(p) for p in preds_raw["risk_prob"]]
+        per_window_risk_raw = [float(p) for p in preds["risk_prob"]]
 
     # Always use LSTM for stage (temporal context matters for stage classification)
-    preds = model.predict(X)
     per_window_stage: list[str] = [_stage_name(s) for s in preds["stage_idx"]]
 
     n_flagged = int(np.sum(np.array(per_window_risk_raw) > threshold))
@@ -200,7 +202,23 @@ def run_inference(
     fc = model.forecast(X_context, steps=forecast_steps)
     # Scale LSTM forecast by current LR risk to ground it to reality
     lstm_forecast_raw: list[float] = [float(v) for v in fc["risk_trajectory"]]
-    forecast_stages: list[int] = [int(v) for v in fc["stage_trajectory"]]
+    
+    # Calculate forecast stages using rules applied to the predicted dynamics trajectory
+    from src2.intelligence.mitre import match_indicators
+    dyn_traj = fc.get("dynamics_trajectory", [])
+    forecast_stages_names = []
+    if dyn_traj:
+        df_forecast = pd.DataFrame(dyn_traj, columns=feature_cols)
+        for i in range(len(df_forecast)):
+            row_df = df_forecast.iloc[[i]]
+            row_indicators = match_indicators(row_df)
+            if float(lstm_forecast_raw[i]) >= 0.5 and row_indicators:
+                best_ind = max(row_indicators, key=lambda x: x.get('count', 0))
+                forecast_stages_names.append(best_ind['stage'])
+            else:
+                forecast_stages_names.append("Benign")
+    else:
+        forecast_stages_names = ["Benign"] * forecast_steps
 
     # Blend: 60% LR-anchored, 40% LSTM trend direction
     # This keeps the forecast calibrated while showing temporal trends
@@ -216,19 +234,28 @@ def run_inference(
     if forecast_risk:
         peak_idx = int(np.argmax(forecast_risk))
         risk_peak = float(forecast_risk[peak_idx])
-        peak_stage_idx = forecast_stages[peak_idx]
     else:
         risk_peak = risk_current
-        peak_stage_idx = int(preds["stage_idx"][-1])
 
-    # Stage: use majority vote of per-window stages, weighted by LR risk
-    current_stage_idx = int(preds["stage_idx"][-1])
-    # If LR says low risk but LSTM says high stage, trust LR
-    if risk_current < threshold and current_stage_idx > 0:
-        current_stage_idx = 0  # Override to Benign if LR says safe
+    from src2.intelligence.mitre import match_indicators
+    df_last = pd.DataFrame(X[:, -1, :], columns=feature_cols)
+    matched_indicators = match_indicators(df_last)
 
-    # Confidence: distance from decision boundary × LR probability
-    stage_confidence = min(1.0, abs(risk_current - threshold) / max(threshold, 0.01))
+    # Stage: explicitly rule/knowledge-graph based
+    if risk_current >= threshold:
+        if matched_indicators:
+            # Pick the stage of the most frequently matched indicator
+            best_indicator = max(matched_indicators, key=lambda x: x.get('count', 0))
+            current_stage_name = best_indicator['stage']
+        else:
+            current_stage_name = "Unknown Activity"
+    else:
+        current_stage_name = "Benign"
+
+    # Confidence based on LR distance from threshold and rule match
+    base_conf = min(1.0, abs(risk_current - threshold) / max(threshold, 0.01))
+    rule_bonus = 0.2 if matched_indicators else 0.0
+    stage_confidence = min(1.0, base_conf + rule_bonus)
 
     # ------------------------------------------------------------------
     # 5. Detect mode & synthetic flag
@@ -241,12 +268,9 @@ def run_inference(
     # 6. Explainability & MITRE intelligence
     # ------------------------------------------------------------------
     from src2.intelligence.explainability import get_important_features, get_important_windows
-    from src2.intelligence.mitre import match_indicators
 
-    df_last = pd.DataFrame(X[:, -1, :], columns=feature_cols)
     important_features = get_important_features(model, lr_scorer, X, feature_cols, top_n=10)
     important_windows  = get_important_windows(per_window_risk_raw, timestamps=timestamps)
-    matched_indicators = match_indicators(df_last)
 
     # ------------------------------------------------------------------
     # 7. Assemble contract
@@ -264,14 +288,15 @@ def run_inference(
         "risk_current": risk_current,
         "threshold": threshold,
         "forecast": forecast_risk,
-        "forecast_stages": [_stage_name(s) for s in forecast_stages],
-        "stage": _stage_name(current_stage_idx),
+        "forecast_stages": forecast_stages_names,
+        "stage": current_stage_name,
         "stage_confidence": stage_confidence,
         "per_window_risk": per_window_risk_raw,
         "per_window_stage": per_window_stage,
         "n_windows": n_windows,
         "n_flagged": n_flagged,
-        "important_features": important_features,
+        "present_risk_explanation": important_features["present_risk_explanation"],
+        "future_forecast_explanation": important_features["future_forecast_explanation"],
         "important_windows": important_windows,
         "matched_indicators": matched_indicators,
         "dynamics_mse": dynamics_mse,

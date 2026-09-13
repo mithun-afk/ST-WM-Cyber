@@ -4,35 +4,35 @@ MITRE_INDICATORS = [
     {
         'id': 'T1046',
         'name': 'Network Service Scanning',
-        'stage': 'Reconnaissance',
+        'stage': 'Discovery',
         'condition': lambda r: r.get('syn_rate', 0) > 0.8 and r.get('fwd_pkts', 0) < 5,
         'description': 'High rate of SYN packets with very few forward packets indicates port scanning.'
     },
     {
         'id': 'T1110',
         'name': 'Brute Force',
-        'stage': 'InitialAccess',
+        'stage': 'Credential Access',
         'condition': lambda r: r.get('fwd_pkts', 0) > 50 and r.get('rst_rate', 0) > 0.3,
         'description': 'Large number of forward packets paired with a high reset rate indicates brute force authentication.'
     },
     {
         'id': 'T1071',
         'name': 'Application Layer Protocol',
-        'stage': 'CommandAndControl',
+        'stage': 'Command And Control',
         'condition': lambda r: r.get('flow_duration', 0) > 60000000 and r.get('ack_flag_cnt', 0) > 100,
         'description': 'Extremely long flow duration with continuous ACK packets suggests C2 beaconing over standard ports.'
     },
     {
         'id': 'T1048',
         'name': 'Exfiltration Over Alternative Protocol',
-        'stage': 'Impact',
+        'stage': 'Exfiltration',
         'condition': lambda r: r.get('byte_ratio', 0) > 10 and r.get('bwd_pkts', 0) < 5,
         'description': 'Massive outbound byte ratio with almost no return packets indicates data exfiltration.'
     },
     {
         'id': 'T1021',
         'name': 'Remote Services',
-        'stage': 'LateralMovement',
+        'stage': 'Lateral Movement',
         'condition': lambda r: r.get('pkt_len_mean', 0) > 200 and r.get('ack_flag_cnt', 0) > 20 and r.get('syn_flag_cnt', 0) > 0,
         'description': 'Persistent connections with large average packet sizes common in RDP or SSH lateral movement.'
     },
@@ -53,7 +53,7 @@ MITRE_INDICATORS = [
     {
         'id': 'T1041',
         'name': 'Exfiltration Over C2 Channel',
-        'stage': 'Impact',
+        'stage': 'Exfiltration',
         'condition': lambda r: r.get('idle_mean', 0) > 1000000 and r.get('byte_ratio', 0) > 5,
         'description': 'High idle times punctuated by large bursts of outbound data indicates exfiltration over an established C2.'
     }

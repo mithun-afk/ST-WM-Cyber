@@ -45,6 +45,8 @@ _IDLE_BASELINE = {
     "ttl_std":               4.0,
     "fragment_count":        0.0,
     "retransmit_count":      0.0,
+    "unique_dst_ips":        1.0,
+    "unique_dst_ports":      2.0,
 }
 
 
@@ -93,6 +95,12 @@ def aggregate_packets(packets, duration_sec: float) -> Dict[str, float]:
 
     # Track per-flow durations for a realistic flow_duration mean
     flow_start: dict = {}   # flow_key -> first_seen_time
+    seen_tcp_seqs = set()
+    frag_cnt = 0
+    retrans_cnt = 0
+    unique_dst_ips = set()
+    unique_dst_ports = set()
+    fwd_win_bytes = []
 
     for p in packets:
         length = len(p)
@@ -106,10 +114,19 @@ def aggregate_packets(packets, duration_sec: float) -> Dict[str, float]:
         if p.haslayer("IP"):
             ip = p["IP"]
             if local_ip is None:
-                local_ip = ip.src
+                # Basic heuristic for internal IP if first packet is an internal subnet
+                if ip.src.startswith("192.168.") or ip.src.startswith("10.") or ip.src.startswith("172."):
+                    local_ip = ip.src
+                else:
+                    local_ip = ip.dst # assume dst is local if src is not standard internal
 
             ttls.append(float(ip.ttl))
-            is_fwd = (ip.src == local_ip)
+            
+            # Subnet based directionality is more robust for enterprise
+            is_src_internal = ip.src.startswith("192.168.") or ip.src.startswith("10.") or ip.src.startswith("172.") or ip.src == local_ip
+            is_fwd = is_src_internal
+            
+            unique_dst_ips.add(ip.dst)
 
             if is_fwd:
                 fwd_pkts += 1
@@ -118,10 +135,24 @@ def aggregate_packets(packets, duration_sec: float) -> Dict[str, float]:
                 bwd_pkts += 1
                 bwd_bytes += length
 
+            if ip.frag > 0 or (ip.flags & 1):
+                frag_cnt += 1
+
             # Build a rough flow key (5-tuple hash)
             if p.haslayer("TCP"):
                 tcp = p["TCP"]
                 flags = tcp.flags
+                unique_dst_ports.add(tcp.dport)
+                
+                # Check for retransmission (simplified)
+                seq_key = (ip.src, ip.dst, tcp.sport, tcp.dport, tcp.seq)
+                if seq_key in seen_tcp_seqs and length > 0:
+                    retrans_cnt += 1
+                seen_tcp_seqs.add(seq_key)
+                
+                if is_fwd:
+                    fwd_win_bytes.append(tcp.window)
+
                 if "S" in flags: syn_cnt += 1
                 if "R" in flags: rst_cnt += 1
                 if "P" in flags: psh_cnt += 1
@@ -138,6 +169,8 @@ def aggregate_packets(packets, duration_sec: float) -> Dict[str, float]:
                     flow_start[fkey] = pt
 
             elif p.haslayer("UDP"):
+                udp = p["UDP"]
+                unique_dst_ports.add(udp.dport)
                 psh_cnt += 1  # UDP = data delivery, equiv to PSH
 
     # -----------------------------------------------------------------------
@@ -160,7 +193,7 @@ def aggregate_packets(packets, duration_sec: float) -> Dict[str, float]:
         mean_flow_dur = 50000.0  # 50ms default for idle windows
 
     # init_fwd_win_bytes proxy: typical TCP window size for observed SYN packets
-    init_fwd_win = 65535.0 if syn_cnt > 0 else 0.0
+    init_fwd_win = float(np.mean(fwd_win_bytes)) if fwd_win_bytes else (65535.0 if syn_cnt > 0 else 0.0)
 
     return {
         "flow_duration":       mean_flow_dur,
@@ -186,6 +219,8 @@ def aggregate_packets(packets, duration_sec: float) -> Dict[str, float]:
         # PCAP extras
         "ttl_mean":            float(np.mean(ttl_arr)),
         "ttl_std":             float(np.std(ttl_arr)) if len(ttl_arr) > 1 else 0.0,
-        "fragment_count":      0.0,
-        "retransmit_count":    0.0,
+        "fragment_count":      float(frag_cnt),
+        "retransmit_count":    float(retrans_cnt),
+        "unique_dst_ips":      float(len(unique_dst_ips)),
+        "unique_dst_ports":    float(len(unique_dst_ports)),
     }

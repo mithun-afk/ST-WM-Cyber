@@ -25,7 +25,11 @@ def _make_valid_df(n: int = 50) -> pd.DataFrame:
     from src2.data.schema import CANONICAL_FEATURES
 
     rng = np.random.default_rng(0)
-    data = {col: rng.random(n) for col in CANONICAL_FEATURES}
+    
+    from src2.data.schema import PCAP_EXTRA_FEATURES
+    all_raw_cols = CANONICAL_FEATURES + ["fragment_count", "retransmit_count", "ttl_mean", "ttl_std", "unique_dst_ips", "unique_dst_ports"]
+    
+    data = {col: rng.random(n) for col in all_raw_cols}
     data["binary_label"] = rng.integers(0, 2, n).astype(float)
     base = pd.Timestamp("2024-01-01")
     data["Timestamp"] = [base + pd.Timedelta(seconds=i) for i in range(n)]
@@ -117,8 +121,8 @@ def test_feature_engineering():
     df_eng = engineer_features(df)
     missing = [c for c in ENGINEERED_FEATURE_COLS if c not in df_eng.columns]
     assert len(missing) == 0, f"Missing engineered columns: {missing}"
-    assert len(ENGINEERED_FEATURE_COLS) == 25, (
-        f"Expected 25 engineered feature cols, got {len(ENGINEERED_FEATURE_COLS)}"
+    assert len(ENGINEERED_FEATURE_COLS) == 31, (
+        f"Expected 31 engineered feature cols, got {len(ENGINEERED_FEATURE_COLS)}"
     )
 
 
@@ -130,10 +134,11 @@ def test_temporal_windows():
     df = _make_valid_df(50)
     df = engineer_features(df)
     tb = TemporalWindowBuilder(seq_len=5)
-    X, y, ts = tb.build(df, ENGINEERED_FEATURE_COLS)
+    X, X_next, y, ts = tb.build(df, ENGINEERED_FEATURE_COLS)
 
     expected_n = len(df) - 5  # 45 windows
-    assert X.shape == (expected_n, 5, 25), f"X shape mismatch: {X.shape}"
+    assert X.shape == (expected_n, 5, 31), f"X shape mismatch: {X.shape}"
+    assert X_next.shape == (expected_n, 31), f"X_next shape mismatch: {X_next.shape}"
     assert y.shape == (expected_n,), f"y shape mismatch: {y.shape}"
     assert len(ts) == expected_n
     assert X.dtype == np.float32
@@ -182,7 +187,7 @@ def test_baseline_fit_predict():
     df = _make_valid_df(80)
     df = engineer_features(df)
     tb = TemporalWindowBuilder(seq_len=5)
-    X, y, _ = tb.build(df, ENGINEERED_FEATURE_COLS)
+    X, X_next, y, _ = tb.build(df, ENGINEERED_FEATURE_COLS)
     X_flat = X.reshape(len(X), -1)
 
     bl = LogisticRegressionBaseline()
@@ -210,7 +215,7 @@ def test_baseline_save_load():
     df = _make_valid_df(80)
     df = engineer_features(df)
     tb = TemporalWindowBuilder(seq_len=5)
-    X, y, _ = tb.build(df, ENGINEERED_FEATURE_COLS)
+    X, X_next, y, _ = tb.build(df, ENGINEERED_FEATURE_COLS)
     X_flat = X.reshape(len(X), -1)
 
     bl = LogisticRegressionBaseline()

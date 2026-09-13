@@ -285,7 +285,8 @@ if page == "▶️ Live Network Capture":
         risk = result.get("risk", 0.0)
         stage = result.get("stage", "Benign")
         forecast = result.get("forecast", [])
-        features = result.get("important_features", [])
+        features_present = result.get("present_risk_explanation", [])
+        features_future = result.get("future_forecast_explanation", [])
 
         # Track rolling history
         st.session_state.risk_history.append(risk)
@@ -461,9 +462,9 @@ if page == "▶️ Live Network Capture":
             else:
                 st.error(f"**Predicted Motive:** {motive}<br>**Action:** {next_move}", icon="🚨")
             
-            if features and risk > 0.3:
-                st.markdown("**Why was this flagged? (Explainability)**")
-                for item in features[:3]:
+            if features_present and risk > 0.3:
+                st.write("**Key Indicators:**")
+                for item in features_present[:3]:
                     feat = item.get("feature", "")
                     imp = item.get("importance", 0)
                     desc = FEATURE_EXPLAIN.get(feat, f"Anomalous variance in {feat}.")
@@ -530,28 +531,54 @@ if page == "▶️ Live Network Capture":
                 st.info("No connections mapped yet.")
 
         with bot_c2:
-            st.markdown("**Top Contributing Features (SHAP)**")
-            if features:
-                import pandas as pd
-                feat_df = pd.DataFrame(features).rename(columns={"feature": "Feature", "importance": "Saliency"})
-                feat_df = feat_df.sort_values("Saliency", ascending=True).tail(5)
-                fig_sal = go.Figure(go.Bar(
-                    x=feat_df["Saliency"], y=feat_df["Feature"],
-                    orientation="h",
-                    marker=dict(
-                        color=feat_df["Saliency"],
-                        colorscale=[[0, "#3fb950"], [0.5, "#d29922"], [1.0, "#f85149"]],
-                    ),
-                ))
-                fig_sal.update_layout(
-                    paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
-                    font={"color": "#c9d1d9"}, height=300,
-                    margin=dict(t=10, b=10, l=10, r=10),
-                    xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d"),
-                )
-                st.plotly_chart(fig_sal, use_container_width=True)
-            else:
-                st.success("Traffic matches benign baseline.")
+            st.markdown("**Explainability (Saliency)**")
+            
+            xai_tabs = st.tabs(["Present Risk (LR)", "Forecast Trajectory (LSTM)"])
+            with xai_tabs[0]:
+                if features_present:
+                    import pandas as pd
+                    feat_df = pd.DataFrame(features_present).rename(columns={"feature": "Feature", "importance": "Saliency"})
+                    feat_df = feat_df.sort_values("Saliency", ascending=True).tail(5)
+                    fig_sal = go.Figure(go.Bar(
+                        x=feat_df["Saliency"], y=feat_df["Feature"],
+                        orientation="h",
+                        marker=dict(
+                            color=feat_df["Saliency"],
+                            colorscale=[[0, "#3fb950"], [0.5, "#d29922"], [1.0, "#f85149"]],
+                        ),
+                    ))
+                    fig_sal.update_layout(
+                        paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                        font={"color": "#c9d1d9"}, height=250,
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d"),
+                    )
+                    st.plotly_chart(fig_sal, use_container_width=True)
+                else:
+                    st.info("No present risk features.")
+                    
+            with xai_tabs[1]:
+                if features_future:
+                    import pandas as pd
+                    feat_df_f = pd.DataFrame(features_future).rename(columns={"feature": "Feature", "importance": "Saliency"})
+                    feat_df_f = feat_df_f.sort_values("Saliency", ascending=True).tail(5)
+                    fig_sal_f = go.Figure(go.Bar(
+                        x=feat_df_f["Saliency"], y=feat_df_f["Feature"],
+                        orientation="h",
+                        marker=dict(
+                            color=feat_df_f["Saliency"],
+                            colorscale=[[0, "#3fb950"], [0.5, "#3b82f6"], [1.0, "#9333ea"]],
+                        ),
+                    ))
+                    fig_sal_f.update_layout(
+                        paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+                        font={"color": "#c9d1d9"}, height=250,
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d"),
+                    )
+                    st.plotly_chart(fig_sal_f, use_container_width=True)
+                else:
+                    st.info("No future trajectory features.")
 
         with bot_c3:
             st.markdown("**Key Traffic Indicators**")

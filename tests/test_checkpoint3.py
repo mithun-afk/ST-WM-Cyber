@@ -68,7 +68,8 @@ def test_important_features_top10():
     model = DummyModel(input_dim=25)
     X = np.random.randn(10, 5, 25)
     feature_cols = [f"feat_{i}" for i in range(25)]
-    important = get_important_features(model, X, feature_cols, top_n=10)
+    important_dict = get_important_features(model, None, X, feature_cols, top_n=10)
+    important = important_dict["future_forecast_explanation"]
     assert len(important) == 10
     assert 'feature' in important[0]
     assert 'importance' in important[0]

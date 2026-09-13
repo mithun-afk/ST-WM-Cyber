@@ -15,6 +15,12 @@ ENGINEERED_FEATURE_COLS: list[str] = CANONICAL_FEATURES + [
     "iat_jitter",
     "syn_rate",
     "rst_rate",
+    "fragment_count",
+    "retransmit_count",
+    "ttl_mean",
+    "ttl_std",
+    "unique_dst_ips",
+    "unique_dst_ports",
 ]
 
 
