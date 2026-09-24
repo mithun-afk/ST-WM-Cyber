@@ -182,12 +182,18 @@ def run_inference(
     if lr_scorer is not None and hasattr(lr_scorer, 'predict_proba'):
         X_flat = X.reshape(n_windows, -1)
         try:
-            per_window_risk_raw = [float(p) for p in lr_scorer.predict_proba(X_flat)[:, 1]]
+            lr_risk_raw = [float(p) for p in lr_scorer.predict_proba(X_flat)[:, 1]]
         except Exception as e:
             print(f"LR Scorer error (likely feature dim mismatch): {e}")
-            per_window_risk_raw = [float(p) for p in preds["risk_prob"]]
+            lr_risk_raw = [float(p) for p in preds["risk_prob"]]
     else:
-        per_window_risk_raw = [float(p) for p in preds["risk_prob"]]
+        lr_risk_raw = [float(p) for p in preds["risk_prob"]]
+
+    # PRIMARY DETECTION: Logistic Regression (calibrated, stateless, high precision on protocol flags)
+    # LSTM risk output is used only for the FORECAST trajectory (its sigmoid is biased toward 1.0
+    # due to focal loss alpha=0.90 needed for 1.6% minority class training — not suitable as a
+    # real-time alert trigger on its own).
+    per_window_risk_raw = lr_risk_raw
 
     # Always use LSTM for stage (temporal context matters for stage classification)
     per_window_stage: list[str] = [_stage_name(s) for s in preds["stage_idx"]]
@@ -200,7 +206,6 @@ def run_inference(
     # ------------------------------------------------------------------
     X_context = X[-1]   # (seq_len, F) — most recent LSTM context
     fc = model.forecast(X_context, steps=forecast_steps)
-    # Scale LSTM forecast by current LR risk to ground it to reality
     lstm_forecast_raw: list[float] = [float(v) for v in fc["risk_trajectory"]]
     
     # Calculate forecast stages using rules applied to the predicted dynamics trajectory
@@ -220,15 +225,16 @@ def run_inference(
     else:
         forecast_stages_names = ["Benign"] * forecast_steps
 
-    # Blend: 60% LR-anchored, 40% LSTM trend direction
-    # This keeps the forecast calibrated while showing temporal trends
+    # Forecast: scale LSTM trajectory relative to current max-ensemble risk.
+    # The LSTM gives relative direction; we anchor its mean to the current risk.
     lr_anchor = risk_current
+    lstm_mean = float(np.mean(lstm_forecast_raw)) if lstm_forecast_raw else 0.5
     forecast_risk = []
     for i, lv in enumerate(lstm_forecast_raw):
-        # LSTM deviation from its own mean, scaled by LR anchor
-        lstm_dev = lv - 0.5
-        blended = np.clip(lr_anchor + 0.4 * lstm_dev + 0.05 * (i * lstm_dev), 0.0, 1.0)
-        forecast_risk.append(float(blended))
+        # Center LSTM output and scale around LR anchor
+        lstm_dev = lv - lstm_mean
+        blended = float(np.clip(lr_anchor + lstm_dev, 0.0, 1.0))
+        forecast_risk.append(blended)
 
     # Peak risk in forecast horizon
     if forecast_risk:

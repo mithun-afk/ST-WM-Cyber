@@ -4,9 +4,9 @@
   "num_layers": 2,
   "num_stages": 6,
   "training_log": {
-    "epochs_run": 16,
-    "best_val_loss": 3.5561378641801866e-07,
-    "dynamics_mse": 7.10069514298084e-07,
+    "epochs_run": 24,
+    "best_val_loss": 0.008357144193723798,
+    "dynamics_mse": 0.07569263130426407,
     "converged": true
   }
 }

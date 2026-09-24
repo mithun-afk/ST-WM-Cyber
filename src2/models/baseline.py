@@ -26,7 +26,7 @@ class LogisticRegressionBaseline:
         ``'balanced'`` adjusts for imbalanced datasets.
     """
 
-    def __init__(self, C: float = 1.0, class_weight: str = "balanced") -> None:
+    def __init__(self, C: float = 0.1, class_weight: str = "balanced") -> None:
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import StandardScaler
         
@@ -35,8 +35,8 @@ class LogisticRegressionBaseline:
             ("lr", LogisticRegression(
                 C=C,
                 class_weight=class_weight,
-                max_iter=1000,
-                solver="lbfgs",
+                max_iter=2000,
+                solver="saga",   # saga scales to high-dim (155-feature flattened windows)
             ))
         ])
         self._trained = False

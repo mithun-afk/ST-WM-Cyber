@@ -33,7 +33,7 @@ from src2.data.temporal_windows import TemporalWindowBuilder
 # ---------------------------------------------------------------------------
 WINDOW_SEC = 5           # seconds per temporal window (matches live pipeline)
 SEQ_LEN    = 5           # LSTM lookback (number of windows)
-EPOCHS     = 30
+EPOCHS     = 50
 DATA_PATHS = [
     "data/raw/Wednesday-21-02-2018_TrafficForML_CICFlowMeter.csv",
     "data/raw/Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv",
@@ -79,10 +79,22 @@ def aggregate_to_windows(df: pd.DataFrame, window_sec: float = 5.0) -> pd.DataFr
     # Only keep numeric cols that exist
     numeric_cols = [c for c in numeric_cols if c in df.columns]
 
-    # Aggregate: mean for most features, max for label (any attack in window = attack window)
-    agg_dict = {c: "mean" for c in numeric_cols if c != "binary_label"}
-    if "binary_label" in df.columns:
-        agg_dict["binary_label"] = "max"
+    # Attack-sensitive features: use max() so a single malicious flow in the window
+    # preserves its signal rather than being diluted by surrounding benign traffic.
+    # Rate/count features like syn_flag_cnt spike during attacks — max captures this.
+    MAX_AGG_COLS = {
+        "syn_flag_cnt", "rst_flag_cnt", "flow_pkts_per_sec", "flow_bytes_per_sec",
+        "syn_rate", "rst_rate", "byte_ratio", "pkt_ratio", "unique_dst_ips",
+        "unique_dst_ports", "fragment_count", "retransmit_count",
+    }
+    agg_dict = {}
+    for c in numeric_cols:
+        if c == "binary_label":
+            agg_dict[c] = "max"
+        elif c in MAX_AGG_COLS:
+            agg_dict[c] = "max"
+        else:
+            agg_dict[c] = "mean"
 
     windowed = df.groupby("_bucket").agg(agg_dict)
 
@@ -250,7 +262,8 @@ def run_training():
         y_dyn=X_next_train,
         y_stage=y_train_stage,
         epochs=EPOCHS,
-        patience=5
+        patience=7,
+        batch_size=128,
     )
     print(f"  Best val loss: {min(log.get('val_loss', [999])):.4f}")
 

@@ -122,22 +122,36 @@ class STGWMModel:
             y_dyn_scaled = X_scaled[:, -1, :]
 
         self._net = _STGWMNet(self.input_dim, self.hidden_dim, self.num_layers, self.num_stages).to(device)
-        focal = _FocalLoss(alpha=0.75, gamma=2.0)
+        # alpha=0.90 aggressively up-weights the rare attack class (1.6% of windows)
+        focal = _FocalLoss(alpha=0.90, gamma=2.0)
         ce_loss = nn.CrossEntropyLoss()
         sl1 = nn.SmoothL1Loss()
         optimizer = torch.optim.Adam(self._net.parameters(), lr=lr)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
-        split = int(N * 0.8)
-        Xt = torch.tensor(X_scaled[:split], dtype=torch.float32, device=device)
-        Xv = torch.tensor(X_scaled[split:], dtype=torch.float32, device=device)
-        yt_risk = torch.tensor(y_risk[:split], dtype=torch.float32, device=device)
-        yv_risk = torch.tensor(y_risk[split:], dtype=torch.float32, device=device)
-        yt_dyn = torch.tensor(y_dyn_scaled[:split], dtype=torch.float32, device=device)
-        yv_dyn = torch.tensor(y_dyn_scaled[split:], dtype=torch.float32, device=device)
+        # Stratified split: preserve attack ratio in both train/val.
+        # Without this, all attacks fall into val (chronological order = attacks at end),
+        # so the LSTM never sees attack gradients and val_loss is always 0.0 → no learning.
+        attack_idx = np.where(y_risk == 1)[0]
+        benign_idx = np.where(y_risk == 0)[0]
+        rng = np.random.default_rng(42)
+        n_val_attack = max(1, int(len(attack_idx) * 0.20))
+        n_val_benign = max(1, int(len(benign_idx) * 0.20))
+        val_attack = rng.choice(attack_idx, n_val_attack, replace=False)
+        val_benign = rng.choice(benign_idx, n_val_benign, replace=False)
+        val_idx = np.concatenate([val_attack, val_benign])
+        train_idx = np.setdiff1d(np.arange(N), val_idx)
+
+        Xt = torch.tensor(X_scaled[train_idx], dtype=torch.float32, device=device)
+        Xv = torch.tensor(X_scaled[val_idx], dtype=torch.float32, device=device)
+        yt_risk = torch.tensor(y_risk[train_idx], dtype=torch.float32, device=device)
+        yv_risk = torch.tensor(y_risk[val_idx], dtype=torch.float32, device=device)
+        yt_dyn = torch.tensor(y_dyn_scaled[train_idx], dtype=torch.float32, device=device)
+        yv_dyn = torch.tensor(y_dyn_scaled[val_idx], dtype=torch.float32, device=device)
 
         if y_stage is not None:
-            yt_stage = torch.tensor(y_stage[:split], dtype=torch.long, device=device)
-            yv_stage = torch.tensor(y_stage[split:], dtype=torch.long, device=device)
+            yt_stage = torch.tensor(y_stage[train_idx], dtype=torch.long, device=device)
+            yv_stage = torch.tensor(y_stage[val_idx], dtype=torch.long, device=device)
             stage_weight = 0.5
         else:
             yt_stage = yv_stage = None
@@ -197,7 +211,9 @@ class STGWMModel:
 
             print(f"  Epoch {ep+1:3d}/{epochs}  train_loss={epoch_loss/max(n_batches,1):.4f}  "
                   f"val_loss={val_loss:.4f}  no_improve={epochs_no_improve}/{patience}{tag}")
-                
+            
+            scheduler.step(val_loss)
+            
             if epochs_no_improve >= patience:
                 break
                 
@@ -224,6 +240,9 @@ class STGWMModel:
         if X.ndim == 2:
             X = X[:, np.newaxis, :]
         N, seq_len, F = X.shape
+        # Clean up any inf/nan before scaling
+        X = np.nan_to_num(X, nan=0.0, posinf=1e9, neginf=-1e9)
+        X = np.clip(X, -1e9, 1e9)
         X_scaled = np.clip(
             self._scaler.transform(X.reshape(-1, F)).reshape(N, seq_len, F).astype(np.float32),
             -10.0, 10.0
