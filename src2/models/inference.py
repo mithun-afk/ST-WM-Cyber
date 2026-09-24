@@ -141,6 +141,7 @@ def run_inference(
     # ------------------------------------------------------------------
     from src2.data.schema import DataQualityGate
     gate = DataQualityGate()
+    gate._min_obs = seq_len + 1  # Override for inference
     ok, msg = gate.validate(df_features)
     if not ok:
         return _make_error("DATA_QUALITY_ERROR", detail=msg)

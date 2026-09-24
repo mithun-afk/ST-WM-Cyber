@@ -28,7 +28,8 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from src2.models.world_model import STGWMModel
 from src2.models.inference import run_inference, STAGE_NAMES
-from src2.data.feature_engineering import engineer_features, MODEL_FEATURES
+from src2.data.feature_engineering import engineer_features
+from src2.data.schema import MODEL_FEATURES
 from src2.live.live_pipeline import LivePipeline
 
 # ---------------------------------------------------------------------------
