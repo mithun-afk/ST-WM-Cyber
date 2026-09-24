@@ -195,8 +195,22 @@ def run_inference(
     # real-time alert trigger on its own).
     per_window_risk_raw = lr_risk_raw
 
-    # Always use LSTM for stage (temporal context matters for stage classification)
-    per_window_stage: list[str] = [_stage_name(s) for s in preds["stage_idx"]]
+    # Apply MITRE rule-based classification to the current window
+    from src2.intelligence.mitre import match_indicators
+    df_current = pd.DataFrame(X[:, -1, :], columns=feature_cols)
+    matched_current = match_indicators(df_current)
+
+    # For each window, if there's a match, use it, else Benign
+    # Since match_indicators returns matches for rows, we check it per row.
+    # Actually, match_indicators processes the whole DataFrame and returns a list of matched rule dicts,
+    # which contain 'window_indices'. We need to map this back to each window.
+    per_window_stage = ["Benign"] * n_windows
+    for match in matched_current:
+        stage = match['stage']
+        for idx in match['window_indices']:
+            if per_window_stage[idx] == "Benign":
+                per_window_stage[idx] = stage
+
 
     n_flagged = int(np.sum(np.array(per_window_risk_raw) > threshold))
     risk_current = per_window_risk_raw[-1]

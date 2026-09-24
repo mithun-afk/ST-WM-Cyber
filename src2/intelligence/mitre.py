@@ -4,58 +4,51 @@ MITRE_INDICATORS = [
     {
         'id': 'T1046',
         'name': 'Network Service Scanning',
-        'stage': 'Discovery',
-        'condition': lambda r: r.get('syn_rate', 0) > 0.8 and r.get('fwd_pkts', 0) < 5,
-        'description': 'High rate of SYN packets with very few forward packets indicates port scanning.'
+        'stage': 'Reconnaissance',
+        'condition': lambda r: (r.get('syn_flag_cnt', 0) > 1 and r.get('unique_dst_ports', 0) > 5) or r.get('syn_rate', 0) > 0.6,
+        'description': 'High rate of SYN packets or scanning multiple unique destination ports indicates reconnaissance.'
     },
     {
         'id': 'T1110',
         'name': 'Brute Force',
         'stage': 'Credential Access',
-        'condition': lambda r: r.get('fwd_pkts', 0) > 50 and r.get('rst_rate', 0) > 0.3,
-        'description': 'Large number of forward packets paired with a high reset rate indicates brute force authentication.'
+        'condition': lambda r: r.get('flow_pkts_per_sec', 0) > 100 and r.get('rst_flag_cnt', 0) > 0,
+        'description': 'High packet rates accompanied by resets often indicate rapid credential guessing.'
     },
     {
         'id': 'T1071',
         'name': 'Application Layer Protocol',
         'stage': 'Command And Control',
-        'condition': lambda r: r.get('flow_duration', 0) > 60000000 and r.get('ack_flag_cnt', 0) > 100,
-        'description': 'Extremely long flow duration with continuous ACK packets suggests C2 beaconing over standard ports.'
+        'condition': lambda r: r.get('flow_duration', 0) > 4000000 and r.get('ack_flag_cnt', 0) > 0,
+        'description': 'Flow spanning the entire 5-second window with active acknowledgments suggests C2 beaconing.'
     },
     {
         'id': 'T1048',
         'name': 'Exfiltration Over Alternative Protocol',
         'stage': 'Exfiltration',
-        'condition': lambda r: r.get('byte_ratio', 0) > 10 and r.get('bwd_pkts', 0) < 5,
-        'description': 'Massive outbound byte ratio with almost no return packets indicates data exfiltration.'
+        'condition': lambda r: r.get('down_up_ratio', 0) > 10 or r.get('fwd_bytes', 0) > 50000,
+        'description': 'Massive outbound byte ratio or large forward byte volume indicates data exfiltration.'
     },
     {
         'id': 'T1021',
         'name': 'Remote Services',
         'stage': 'Lateral Movement',
-        'condition': lambda r: r.get('pkt_len_mean', 0) > 200 and r.get('ack_flag_cnt', 0) > 20 and r.get('syn_flag_cnt', 0) > 0,
+        'condition': lambda r: r.get('pkt_len_mean', 0) > 150 and r.get('ack_flag_cnt', 0) > 5,
         'description': 'Persistent connections with large average packet sizes common in RDP or SSH lateral movement.'
     },
     {
         'id': 'T1486',
         'name': 'Data Encrypted for Impact',
         'stage': 'Impact',
-        'condition': lambda r: r.get('flow_bytes_per_sec', 0) > 1000000 and r.get('pkt_len_std', 0) > 100,
-        'description': 'Extremely high bandwidth utilization with varied packet sizes often accompanies network-share ransomware encryption.'
+        'condition': lambda r: r.get('flow_bytes_per_sec', 0) > 500000 and r.get('pkt_len_std', 0) > 50,
+        'description': 'High bandwidth utilization with varied packet sizes often accompanies ransomware network-share encryption.'
     },
     {
-        'id': 'T1595',
-        'name': 'Active Scanning',
-        'stage': 'Reconnaissance',
-        'condition': lambda r: r.get('syn_flag_cnt', 0) > 5 and r.get('flow_duration', 0) < 100000,
-        'description': 'Multiple SYN flags within a very short flow duration indicates rapid automated vulnerability scanning.'
-    },
-    {
-        'id': 'T1041',
-        'name': 'Exfiltration Over C2 Channel',
-        'stage': 'Exfiltration',
-        'condition': lambda r: r.get('idle_mean', 0) > 1000000 and r.get('byte_ratio', 0) > 5,
-        'description': 'High idle times punctuated by large bursts of outbound data indicates exfiltration over an established C2.'
+        'id': 'T1498',
+        'name': 'Network Denial of Service',
+        'stage': 'Impact',
+        'condition': lambda r: r.get('syn_flag_cnt', 0) > 10 or r.get('flow_pkts_per_sec', 0) > 500,
+        'description': 'Massive flood of SYN packets or extremely high packet rate indicates a Denial of Service attack.'
     }
 ]
 
