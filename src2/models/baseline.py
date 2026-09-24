@@ -26,19 +26,14 @@ class LogisticRegressionBaseline:
         ``'balanced'`` adjusts for imbalanced datasets.
     """
 
-    def __init__(self, C: float = 0.1, class_weight: str = "balanced") -> None:
-        from sklearn.pipeline import Pipeline
-        from sklearn.preprocessing import StandardScaler
-        
-        self._model = Pipeline([
-            ("scaler", StandardScaler()),
-            ("lr", LogisticRegression(
-                C=C,
-                class_weight=class_weight,
-                max_iter=2000,
-                solver="saga",   # saga scales to high-dim (155-feature flattened windows)
-            ))
-        ])
+    def __init__(self, C: float = 0.1, class_weight=None) -> None:
+        self._model = LogisticRegression(
+            C=C,
+            class_weight=class_weight,
+            max_iter=2000,
+            solver="saga",   # saga scales to high-dim (155-feature flattened windows)
+        )
+        self.scaler = None
         self._trained = False
 
     # ------------------------------------------------------------------
@@ -63,7 +58,17 @@ class LogisticRegressionBaseline:
         X : np.ndarray shape (N, F) or (N, seq, F)
         y : np.ndarray shape (N,)
         """
-        self._model.fit(self._flatten(X), y)
+        N = X.shape[0]
+        seq = X.shape[1] if X.ndim == 3 else 1
+        F = X.shape[-1]
+        
+        # Scale globally across all timesteps
+        X_reshaped = X.reshape(-1, F)
+        from sklearn.preprocessing import StandardScaler
+        self.scaler = StandardScaler()
+        X_scaled = self.scaler.fit_transform(X_reshaped).reshape(N, -1)
+        
+        self._model.fit(X_scaled, y)
         self._trained = True
         return self
 
@@ -72,7 +77,14 @@ class LogisticRegressionBaseline:
         """Return dict with risk_prob."""
         if not self._trained:
             raise RuntimeError("Model has not been trained yet.")
-        probs = self._model.predict_proba(self._flatten(X))[:, 1]
+            
+        N = X.shape[0]
+        seq = X.shape[1] if X.ndim == 3 else 1
+        F = X.shape[-1]
+        X_reshaped = X.reshape(-1, F)
+        X_scaled = self.scaler.transform(X_reshaped).reshape(N, -1)
+        
+        probs = self._model.predict_proba(X_scaled)[:, 1]
         return {
             'risk_prob': probs,
             'stage_idx': np.zeros_like(probs)  # LR doesn't predict stage
@@ -83,7 +95,14 @@ class LogisticRegressionBaseline:
         """Return probability of class 1."""
         if not self._trained:
             raise RuntimeError("Model has not been trained yet.")
-        probas = self._model.predict_proba(self._flatten(X))
+            
+        N = X.shape[0]
+        seq = X.shape[1] if X.ndim == 3 else 1
+        F = X.shape[-1]
+        X_reshaped = X.reshape(-1, F)
+        X_scaled = self.scaler.transform(X_reshaped).reshape(N, -1)
+        
+        probas = self._model.predict_proba(X_scaled)
         # Return probability for positive class
         return probas[:, 1] if probas.shape[1] == 2 else probas
 
@@ -116,7 +135,7 @@ class LogisticRegressionBaseline:
 
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump({"model": self._model, "trained": self._trained}, path)
+        joblib.dump({"model": self._model, "trained": self._trained, "scaler": self.scaler}, path)
 
     # ------------------------------------------------------------------
     @classmethod
@@ -128,4 +147,5 @@ class LogisticRegressionBaseline:
         obj = cls.__new__(cls)
         obj._model = data["model"]
         obj._trained = data["trained"]
+        obj.scaler = data.get("scaler", None)
         return obj

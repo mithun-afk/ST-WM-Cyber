@@ -115,26 +115,28 @@ def test_csv_loader_sample():
 
 def test_feature_engineering():
     """Engineered DataFrame must have exactly 25 feature columns."""
-    from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
+    from src2.data.feature_engineering import engineer_features
+    from src2.data.schema import MODEL_FEATURES
 
     df = _make_valid_df(50)
     df_eng = engineer_features(df)
-    missing = [c for c in ENGINEERED_FEATURE_COLS if c not in df_eng.columns]
+    missing = [c for c in MODEL_FEATURES if c not in df_eng.columns]
     assert len(missing) == 0, f"Missing engineered columns: {missing}"
-    assert len(ENGINEERED_FEATURE_COLS) == 31, (
-        f"Expected 31 engineered feature cols, got {len(ENGINEERED_FEATURE_COLS)}"
+    assert len(MODEL_FEATURES) == 31, (
+        f"Expected 31 engineered feature cols, got {len(MODEL_FEATURES)}"
     )
 
 
 def test_temporal_windows():
     """TemporalWindowBuilder must produce correctly shaped arrays."""
-    from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
+    from src2.data.feature_engineering import engineer_features
+    from src2.data.schema import MODEL_FEATURES
     from src2.data.temporal_windows import TemporalWindowBuilder
 
     df = _make_valid_df(50)
     df = engineer_features(df)
     tb = TemporalWindowBuilder(seq_len=5)
-    X, X_next, y, ts = tb.build(df, ENGINEERED_FEATURE_COLS)
+    X, X_next, y, ts = tb.build(df, MODEL_FEATURES)
 
     expected_n = len(df) - 5  # 45 windows
     assert X.shape == (expected_n, 5, 31), f"X shape mismatch: {X.shape}"
@@ -148,14 +150,15 @@ def test_temporal_windows():
 def test_temporal_windows_insufficient():
     """TemporalWindowBuilder must raise ValueError with the exact message format."""
     from src2.data.temporal_windows import TemporalWindowBuilder
-    from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
+    from src2.data.feature_engineering import engineer_features
+    from src2.data.schema import MODEL_FEATURES
 
     df = _make_valid_df(6)          # 6 rows, seq_len=5 → only 1 window possible
     df = engineer_features(df)
     tb = TemporalWindowBuilder(seq_len=10)  # needs 11 rows
 
     with pytest.raises(ValueError) as exc_info:
-        tb.build(df, ENGINEERED_FEATURE_COLS)
+        tb.build(df, MODEL_FEATURES)
 
     msg = str(exc_info.value)
     assert "Insufficient temporal data" in msg
@@ -180,14 +183,15 @@ def test_demo_generator():
 
 def test_baseline_fit_predict():
     """Baseline must fit, predict, and evaluate with an f1 metric."""
-    from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
+    from src2.data.feature_engineering import engineer_features
+    from src2.data.schema import MODEL_FEATURES
     from src2.data.temporal_windows import TemporalWindowBuilder
     from src2.models.baseline import LogisticRegressionBaseline
 
     df = _make_valid_df(80)
     df = engineer_features(df)
     tb = TemporalWindowBuilder(seq_len=5)
-    X, X_next, y, _ = tb.build(df, ENGINEERED_FEATURE_COLS)
+    X, X_next, y, _ = tb.build(df, MODEL_FEATURES)
     X_flat = X.reshape(len(X), -1)
 
     bl = LogisticRegressionBaseline()
@@ -208,14 +212,15 @@ def test_baseline_fit_predict():
 
 def test_baseline_save_load():
     """Saved and reloaded baseline must produce identical predictions."""
-    from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
+    from src2.data.feature_engineering import engineer_features
+    from src2.data.schema import MODEL_FEATURES
     from src2.data.temporal_windows import TemporalWindowBuilder
     from src2.models.baseline import LogisticRegressionBaseline
 
     df = _make_valid_df(80)
     df = engineer_features(df)
     tb = TemporalWindowBuilder(seq_len=5)
-    X, X_next, y, _ = tb.build(df, ENGINEERED_FEATURE_COLS)
+    X, X_next, y, _ = tb.build(df, MODEL_FEATURES)
     X_flat = X.reshape(len(X), -1)
 
     bl = LogisticRegressionBaseline()

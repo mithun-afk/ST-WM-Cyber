@@ -9,8 +9,8 @@ def test_interface_discovery():
 
 def test_live_aggregator_empty():
     features = aggregate_packets([], 5.0)
-    assert features["flow_duration"] == 28000.0
-    assert features["fwd_pkts"] == 3.5
-    # Must have 24 features (Wait, Canonical=20, Pcap_extras=4 -> 24)
+    assert features["flow_duration"] == 0.0
+    assert features["fwd_pkts"] == 0.0
+    # Must have 26 features
     # The 25th is added by feature engineering
     assert len(features) == 26

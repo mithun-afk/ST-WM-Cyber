@@ -22,7 +22,7 @@ def compute_gradient_saliency(model, X_tensor):
     saliency = X_req.grad.abs().squeeze(0).mean(dim=0).numpy()
     return saliency
 
-def get_important_features(model, lr_scorer, X, feature_cols, top_n=10):
+def get_important_features(model, X, feature_cols, top_n=10, lr_scorer=None):
     import numpy as np
     
     lr_features = []

@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from src2.models.world_model import STGWMModel
 from src2.models.inference import run_inference, STAGE_NAMES
-from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
+from src2.data.feature_engineering import engineer_features, MODEL_FEATURES
 from src2.live.live_pipeline import LivePipeline
 
 # ---------------------------------------------------------------------------
@@ -193,7 +193,7 @@ def stage_badge_html(stage: str) -> str:
 # ---------------------------------------------------------------------------
 st.markdown(
     '<div class="disclosure-bar">🛡️ AI NETWORK FORECASTER &nbsp;|&nbsp; '
-    'ST-WM SPATIAL-TEMPORAL WORLD MODEL &nbsp;|&nbsp; '
+    'LSTM WORLD MODEL &nbsp;|&nbsp; '
     'REAL-TIME NETWORK ATTACK FORECASTING &nbsp;|&nbsp; FULLY OFFLINE</div>',
     unsafe_allow_html=True
 )
@@ -210,10 +210,9 @@ with st.sidebar:
         label_visibility="collapsed"
     )
     st.markdown("---")
-    st.markdown("**Architecture**")
-    st.caption("3-Head LSTM: Risk · Stage · Dynamics")
-    st.caption("Input: 25 inductive graph features")
-    st.caption("Forecast horizon: +60 seconds")
+    st.caption("Architecture: LSTM Sequence Model")
+    st.caption(f"Input: {len(MODEL_FEATURES)} temporal features")
+    st.caption("Forecast horizon: 5 steps")
     st.caption("Window size: 5 seconds")
 
     if model is None:
@@ -226,7 +225,7 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 if page == "▶️ Live Network Capture":
     st.title("📡 Live Network Attack Forecasting")
-    st.markdown("*Real-time packet capture → Spatial-Temporal World Model → 60-second attack trajectory forecast*")
+    st.markdown("*Real-time packet capture → LSTM World Model → Attack trajectory forecast*")
     st.markdown("---")
 
     if model is None:

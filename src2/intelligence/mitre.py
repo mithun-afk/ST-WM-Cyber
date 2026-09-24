@@ -11,7 +11,7 @@ MITRE_INDICATORS = [
     {
         'id': 'T1110',
         'name': 'Brute Force',
-        'stage': 'Credential Access',
+        'stage': 'InitialAccess',
         'condition': lambda r: r.get('flow_pkts_per_sec', 0) > 100 and r.get('rst_flag_cnt', 0) > 0,
         'description': 'High packet rates accompanied by resets often indicate rapid credential guessing.'
     },

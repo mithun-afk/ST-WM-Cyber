@@ -44,6 +44,22 @@ PCAP_EXTRA_FEATURES: list[str] = [
     "scan_entropy",
 ]
 
+MODEL_FEATURES: list[str] = CANONICAL_FEATURES + [
+    "byte_ratio",
+    "pkt_ratio",
+    "iat_jitter",
+    "syn_rate",
+    "rst_rate",
+    "fragment_count",
+    "retransmit_count",
+    "ttl_mean",
+    "ttl_std",
+    "unique_dst_ips",
+    "unique_dst_ports",
+]
+
+MODEL_INPUT_DIM = len(MODEL_FEATURES)
+
 
 class DataQualityGate:
     """Validates a DataFrame before it enters the ML pipeline."""

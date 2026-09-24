@@ -5,7 +5,7 @@ from typing import List, Dict
 import scapy.all as scapy
 
 from src2.live.live_aggregator import aggregate_packets, _empty_features
-from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
+from src2.data.feature_engineering import prepare_model_features, MODEL_FEATURES
 from src2.data.schema import CANONICAL_FEATURES
 from src2.models.inference import run_inference
 
@@ -20,10 +20,6 @@ class LivePipeline:
         self.seq_len = 5
         self.window_duration = 5.0
         
-        # Pre-fill history with empty windows so it calculates immediately
-        for _ in range(self.seq_len):
-            self.history.append(_empty_features())
-        
         self.is_running = False
         self._thread = None
         self.latest_result = None
@@ -35,7 +31,7 @@ class LivePipeline:
 
     def start(self):
         self.is_running = True
-        self.history = [_empty_features() for _ in range(self.seq_len)]
+        self.history = []
         self.latest_result = None
         self.total_packets = 0
         self.current_window = 0
@@ -91,10 +87,10 @@ class LivePipeline:
             
         if len(self.history) == self.seq_len + 1:
             df = pd.DataFrame(self.history)
-            df_proc = engineer_features(df)
+            df_proc = prepare_model_features(df)
             
             try:
-                result = run_inference(self.model, df_proc, ENGINEERED_FEATURE_COLS)
+                result = run_inference(self.model, df_proc, MODEL_FEATURES)
                 result['mode'] = 'LIVE' if not self.pcap_file else 'REPLAY'
                 result['window'] = self.current_window
                 result['packets'] = self.total_packets
@@ -112,6 +108,14 @@ class LivePipeline:
                 self.status = f"ERROR: {e}"
         else:
             self.status = f"COLLECTING HISTORY (Need {self.seq_len + 1}, have {len(self.history)})"
+            self.latest_result = {
+                "status": "COLLECTING",
+                "risk": None,
+                "stage": "Insufficient history",
+                "forecast": [],
+                "n_windows": len(self.history),
+                "required_windows": self.seq_len + 1
+            }
             
     def _run_live_capture(self):
         try:
@@ -163,14 +167,14 @@ class LivePipeline:
             from train_pipeline import aggregate_to_windows
             
             df, _ = load_and_normalize_csv(self.csv_file)
-            df_proc = engineer_features(df)
-            windowed = aggregate_to_windows(df_proc, window_sec=self.window_duration)
+            windowed = aggregate_to_windows(df, window_sec=self.window_duration)
             
-            # Ensure all required features are present
-            for col in ENGINEERED_FEATURE_COLS:
-                if col not in windowed.columns:
-                    windowed[col] = 0.0
-                    
+            # Temporarily save label if present
+            labels = windowed["binary_label"] if "binary_label" in windowed.columns else None
+            windowed = prepare_model_features(windowed)
+            if labels is not None:
+                windowed["binary_label"] = labels
+                
             for idx, row in windowed.iterrows():
                 if not self.is_running: break
                 
@@ -182,7 +186,7 @@ class LivePipeline:
                 if len(self.history) == self.seq_len + 1:
                     df_hist = pd.DataFrame(self.history)
                     try:
-                        result = run_inference(self.model, df_hist, ENGINEERED_FEATURE_COLS)
+                        result = run_inference(self.model, df_hist, MODEL_FEATURES)
                         result['mode'] = 'CSV REPLAY'
                         result['window'] = self.current_window
                         result['packets'] = 0
@@ -192,6 +196,16 @@ class LivePipeline:
                         import traceback
                         print(f"Live inference error: {traceback.format_exc()}")
                         self.status = f"ERROR: {e}"
+                else:
+                    self.status = f"COLLECTING HISTORY (Need {self.seq_len + 1}, have {len(self.history)})"
+                    self.latest_result = {
+                        "status": "COLLECTING",
+                        "risk": None,
+                        "stage": "Insufficient history",
+                        "forecast": [],
+                        "n_windows": len(self.history),
+                        "required_windows": self.seq_len + 1
+                    }
                 
                 self.current_window += 1
                 time.sleep(1.0)

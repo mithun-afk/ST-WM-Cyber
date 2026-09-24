@@ -1,0 +1,120 @@
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator StandardScaler from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator LogisticRegression from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator Pipeline from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator StandardScaler from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator LogisticRegression from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator Pipeline from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator StandardScaler from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator LogisticRegression from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator Pipeline from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator StandardScaler from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator LogisticRegression from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator Pipeline from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator StandardScaler from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator LogisticRegression from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+D:\sih26\ntro_env\Lib\site-packages\sklearn\base.py:525: InconsistentVersionWarning: Trying to unpickle estimator Pipeline from version 1.8.0 when using version 1.9.0. This might lead to breaking code or invalid results. Use at your own risk. For more info please refer to:
+https://scikit-learn.org/stable/model_persistence.html#security-maintainability-limitations
+  warnings.warn(
+============================================================
+NTRO 26153 - CLEAN RETRAIN (src2 pipeline, input_dim=25)
+============================================================
+Loading data/raw/Wednesday-21-02-2018_TrafficForML_CICFlowMeter.csv...
+Loading data/raw/Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv...
+Loaded: (400000, 81) rows | Attack ratio: 0.6303
+Stage distribution: {4: 197785, 0: 147892, 2: 54323}
+Engineering features...
+Feature cols (31): ['flow_duration', 'fwd_pkts', 'bwd_pkts', 'fwd_bytes', 'bwd_bytes', 'flow_iat_mean', 'flow_iat_std', 'syn_flag_cnt', 'rst_flag_cnt', 'psh_flag_cnt', 'ack_flag_cnt', 'fin_flag_cnt', 'pkt_len_mean', 'pkt_len_std', 'flow_bytes_per_sec', 'flow_pkts_per_sec', 'init_fwd_win_bytes', 'active_mean', 'idle_mean', 'down_up_ratio', 'byte_ratio', 'pkt_ratio', 'iat_jitter', 'syn_rate', 'rst_rate', 'fragment_count', 'retransmit_count', 'ttl_mean', 'ttl_std', 'unique_dst_ips', 'unique_dst_ports']
+Building temporal windows...
+Total windows: 399995 | Shape: (399995, 5, 31)
+Attack windows: 252108 / 399995 (63.028%)
+Stage distribution in windows: {0: 147887, 2: 54323, 4: 197785}
+
+Split -> Train:279996  Val:59999  Test:60000
+Train attack ratio: 0.8265
+Val   attack ratio: 0.3448
+Test  attack ratio: 0.0002
+
+Training ST-GWM (input_dim=25, hidden_dim=64, epochs=30)...
+  Epoch   1/30  train_loss=0.2827  val_loss=0.1442  no_improve=0/5  [best]
+  Epoch   2/30  train_loss=0.1708  val_loss=0.1302  no_improve=0/5  [best]
+  Epoch   3/30  train_loss=0.1633  val_loss=0.1288  no_improve=0/5  [best]
+  Epoch   4/30  train_loss=0.1593  val_loss=0.1238  no_improve=0/5  [best]
+  Epoch   5/30  train_loss=0.1568  val_loss=0.1224  no_improve=0/5  [best]
+  Epoch   6/30  train_loss=0.1548  val_loss=0.1217  no_improve=0/5  [best]
+  Epoch   7/30  train_loss=0.1534  val_loss=0.1208  no_improve=0/5  [best]
+  Epoch   8/30  train_loss=0.1525  val_loss=0.1202  no_improve=0/5  [best]
+  Epoch   9/30  train_loss=0.1516  val_loss=0.1193  no_improve=0/5  [best]
+  Epoch  10/30  train_loss=0.1507  val_loss=0.1199  no_improve=1/5
+  Epoch  11/30  train_loss=0.1497  val_loss=0.1190  no_improve=0/5  [best]
+  Epoch  12/30  train_loss=0.1492  val_loss=0.1188  no_improve=0/5  [best]
+  Epoch  13/30  train_loss=0.1489  val_loss=0.1183  no_improve=0/5  [best]
+  Epoch  14/30  train_loss=0.1481  val_loss=0.1180  no_improve=0/5  [best]
+  Epoch  15/30  train_loss=0.1479  val_loss=0.1170  no_improve=0/5  [best]
+  Epoch  16/30  train_loss=0.1474  val_loss=0.1174  no_improve=1/5
+  Epoch  17/30  train_loss=0.1474  val_loss=0.1162  no_improve=0/5  [best]
+  Epoch  18/30  train_loss=0.1468  val_loss=0.1162  no_improve=1/5
+  Epoch  19/30  train_loss=0.1466  val_loss=0.1178  no_improve=2/5
+  Epoch  20/30  train_loss=0.1461  val_loss=0.1161  no_improve=0/5  [best]
+  Epoch  21/30  train_loss=0.1460  val_loss=0.1174  no_improve=1/5
+  Epoch  22/30  train_loss=0.1455  val_loss=0.1160  no_improve=0/5  [best]
+  Epoch  23/30  train_loss=0.1451  val_loss=0.1166  no_improve=1/5
+  Epoch  24/30  train_loss=0.1450  val_loss=0.1160  no_improve=2/5
+  Epoch  25/30  train_loss=0.1444  val_loss=0.1159  no_improve=0/5  [best]
+  Epoch  26/30  train_loss=0.1443  val_loss=0.1157  no_improve=0/5  [best]
+  Epoch  27/30  train_loss=0.1439  val_loss=0.1156  no_improve=0/5  [best]
+  Epoch  28/30  train_loss=0.1435  val_loss=0.1156  no_improve=1/5
+  Epoch  29/30  train_loss=0.1434  val_loss=0.1150  no_improve=0/5  [best]
+  Epoch  30/30  train_loss=0.1434  val_loss=0.1153  no_improve=1/5
+Training log: {'epochs_run': 30, 'best_val_loss': 0.11495807580649853, 'dynamics_mse': 11480766.0, 'converged': True}
+Optimal threshold (val): 0.300
+
+--- TEST SET EVALUATION ---
+Metric               | LR Baseline     | ST-GWM         
+-------------------------------------------------------
+precision            | 0.0002          | 0.0002         
+recall               | 0.6667          | 1.0000         
+f1                   | 0.0005          | 0.0004         
+fpr                  | 0.5585          | 0.9705         
+brier_score          | 0.0333          | 0.4048         
+
+ST-GWM confusion: {'tn': 1771, 'fp': 58217, 'fn': 0, 'tp': 12}
+Stage accuracy: 0.8091
+
+--- SANITY CHECK: Per-Stage Risk ---
+  Benign              : risk=1.000  level=HIGH    pred=Credential Access
+  Reconnaissance      : risk=0.000  level=LOW     pred=Benign
+  InitialAccess       : risk=0.000  level=LOW     pred=Benign
+  LateralMovement     : risk=1.000  level=HIGH    pred=Credential Access
+  Impact              : risk=0.000  level=LOW     pred=Benign
+
+Saving to eval_results/...
+Calibrated threshold saved: 0.300
+Done. Model saved with input_dim=31, hidden_dim=64

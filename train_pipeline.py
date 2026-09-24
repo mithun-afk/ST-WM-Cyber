@@ -21,7 +21,7 @@ import pandas as pd
 from pathlib import Path
 
 from src2.data.csv_loader import load_and_normalize_csv
-from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
+from src2.data.feature_engineering import engineer_features, prepare_model_features, MODEL_FEATURES
 from src2.models.world_model import STGWMModel
 from src2.models.baseline import LogisticRegressionBaseline
 from src2.models.evaluate import evaluate_model, tune_threshold
@@ -75,7 +75,7 @@ def aggregate_to_windows(df: pd.DataFrame, window_sec: float = 5.0) -> pd.DataFr
     t_min = df["Timestamp"].min()
     df["_bucket"] = ((df["Timestamp"] - t_min).dt.total_seconds() // window_sec).astype(int)
 
-    numeric_cols = ENGINEERED_FEATURE_COLS + ["binary_label"]
+    numeric_cols = MODEL_FEATURES + ["binary_label"]
     # Only keep numeric cols that exist
     numeric_cols = [c for c in numeric_cols if c in df.columns]
 
@@ -151,9 +151,8 @@ def run_training():
         print("No CIC data files found. Falling back to synthetic data.")
         from src2.data.demo_generator import generate_demo_data
         data_path = generate_demo_data()
-        df_raw = pd.read_csv(data_path, comment="#")
-        df_raw["binary_label"] = df_raw["binary_label"].astype(float)
-        dfs = [df_raw]
+        df_i, mode = load_and_normalize_csv(data_path, mode="synthetic")
+        dfs = [df_i]
     else:
         for path in available:
             print(f"Loading: {path}")
@@ -165,30 +164,22 @@ def run_training():
     print(f"Total raw rows loaded: {len(df_raw):,}")
 
     # ------------------------------------------------------------------
-    # 2. Feature engineering (adds derived ratio features)
-    # ------------------------------------------------------------------
-    print("Engineering features...")
-    df_proc = engineer_features(df_raw)
-
-    # ------------------------------------------------------------------
-    # 3. WINDOW AGGREGATION — The critical training/live alignment step
+    # 2. WINDOW AGGREGATION & FEATURE PARITY
     # ------------------------------------------------------------------
     print("Aggregating into 5-second temporal windows...")
-    df_windowed = aggregate_to_windows(df_proc, window_sec=WINDOW_SEC)
+    df_windowed = aggregate_to_windows(df_raw, window_sec=WINDOW_SEC)
 
-    # Fill any NaNs produced by aggregation
-    df_windowed = df_windowed.fillna(0.0)
-    df_windowed = df_windowed.replace([np.inf, -np.inf], 0.0)
+    print("Applying unified model feature preparation...")
+    # Temporarily save label if it exists
+    labels = None
+    if "binary_label" in df_windowed.columns:
+        labels = df_windowed["binary_label"]
+        
+    df_windowed = prepare_model_features(df_windowed)
     
-    # Clip extreme values to prevent float32 overflow
-    for col in ENGINEERED_FEATURE_COLS:
-        if col in df_windowed.columns:
-            df_windowed[col] = df_windowed[col].clip(lower=-1e30, upper=1e30)
-
-    # Ensure all required feature columns exist
-    for col in ENGINEERED_FEATURE_COLS:
-        if col not in df_windowed.columns:
-            df_windowed[col] = 0.0
+    # Restore label
+    if labels is not None:
+        df_windowed["binary_label"] = labels
 
     print(f"Training on {len(df_windowed):,} window-level samples.")
 
@@ -209,7 +200,7 @@ def run_training():
         df_windowed["binary_label"] = 0.0
 
     try:
-        X, X_next, y_risk, ts = tb.build(df_windowed, ENGINEERED_FEATURE_COLS)
+        X, X_next, y_risk, ts = tb.build(df_windowed, MODEL_FEATURES)
     except ValueError as e:
         print(f"ERROR building windows: {e}")
         sys.exit(1)
@@ -256,7 +247,7 @@ def run_training():
     # 7. ST-WM LSTM World Model
     # ------------------------------------------------------------------
     print(f"\n[ST-WM] Training LSTM World Model ({EPOCHS} epochs)...")
-    lstm_model = STGWMModel(input_dim=len(ENGINEERED_FEATURE_COLS))
+    lstm_model = STGWMModel(input_dim=len(MODEL_FEATURES))
     log = lstm_model.fit(
         X_train, y_train,
         y_dyn=X_next_train,
@@ -281,17 +272,21 @@ def run_training():
     os.makedirs(OUT_DIR, exist_ok=True)
     lstm_model.save(OUT_DIR)
 
-    # Save calibrated threshold so inference.py can use it
     import json
     import joblib
-    
     thresh_path = os.path.join(OUT_DIR, "calibrated_threshold.json")
     with open(thresh_path, "w") as f:
-        json.dump({"threshold": float(lstm_thresh), "window_sec": WINDOW_SEC}, f, indent=2)
-    print(f"\nCalibrated threshold saved to {thresh_path}")
+        json.dump({
+            "schema_version": 1,
+            "lr_threshold": float(lr_thresh),
+            "lstm_threshold": float(lstm_thresh),
+            "window_sec": WINDOW_SEC,
+            "calibration_split": "validation"
+        }, f, indent=2)
+    print(f"\nCalibrated thresholds saved to {thresh_path}")
     
     lr_path = os.path.join(OUT_DIR, "lr_pipeline.pkl")
-    joblib.dump({"pipeline": lr_model._model}, lr_path)
+    joblib.dump({"pipeline": lr_model}, lr_path)
     print(f"LR Baseline saved to {lr_path}")
 
     # ------------------------------------------------------------------

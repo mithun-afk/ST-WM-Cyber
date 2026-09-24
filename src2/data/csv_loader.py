@@ -56,42 +56,45 @@ def _normalise_label(series: pd.Series, attack_keywords: list[str]) -> pd.Series
     return result
 
 
-def load_and_normalize_csv(path: str | Path) -> tuple[pd.DataFrame, str]:
-    """Load a CIC-IDS-2018 CSV and return (normalised_df, mode).
+def load_and_normalize_csv(path: str | Path, mode: str = "cic") -> tuple[pd.DataFrame, str]:
+    """Load a CSV and return (normalised_df, mode).
 
     Parameters
     ----------
     path : str | Path
         Path to the CSV file.
+    mode : str
+        'cic' for CIC-IDS-2018 CSV, 'synthetic' for pre-engineered demo CSV.
 
     Returns
     -------
     df : pd.DataFrame
-        DataFrame with CANONICAL_FEATURES + metadata + ``binary_label``.
-    mode : str
-        Always ``'FLOW_ONLY_MODE'`` (PCAP extends this).
-
-    Raises
-    ------
-    ValueError
-        If the file does not exist or critical columns are missing.
+    mode_out : str
     """
     path = Path(path)
     if not path.exists():
         raise ValueError(f"Data file not found: {path}")
 
-    cfg = get_config()
-    attack_keywords: list[str] = cfg["labels"]["attack_keywords"]
-
-    # ------------------------------------------------------------------
-    # 1. Read CSV, strip whitespace from column names
-    # ------------------------------------------------------------------
     try:
         df = pd.read_csv(path, low_memory=False)
     except Exception as exc:
         raise ValueError(f"Failed to read CSV '{path}': {exc}") from exc
 
     df.columns = [c.strip() for c in df.columns]
+
+    if mode == "synthetic":
+        missing = [c for c in CANONICAL_FEATURES if c not in df.columns]
+        if missing:
+            raise ValueError(f"Synthetic demo data missing features: {missing}")
+        if "binary_label" not in df.columns:
+            raise ValueError("Synthetic demo data missing 'binary_label'.")
+        if "Timestamp" in df.columns:
+            df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+            df = df.sort_values("Timestamp").reset_index(drop=True)
+        return df, "SYNTHETIC_MODE"
+
+    cfg = get_config()
+    attack_keywords: list[str] = cfg["labels"]["attack_keywords"]
 
     # ------------------------------------------------------------------
     # 2. Check Label column exists

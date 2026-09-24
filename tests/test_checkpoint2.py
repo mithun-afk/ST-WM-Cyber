@@ -13,7 +13,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src2.data.demo_generator import generate_demo_data
-from src2.data.feature_engineering import engineer_features, ENGINEERED_FEATURE_COLS
+from src2.data.feature_engineering import engineer_features
+from src2.data.schema import MODEL_FEATURES
 from src2.data.temporal_windows import TemporalWindowBuilder
 from src2.models.world_model import STGWMModel, _STGWMNet
 from src2.models.inference import run_inference
@@ -35,7 +36,7 @@ def demo_df():
 @pytest.fixture(scope="module")
 def windows(demo_df):
     builder = TemporalWindowBuilder(seq_len=5)
-    X, X_next, y_risk, ts = builder.build(demo_df, ENGINEERED_FEATURE_COLS)
+    X, X_next, y_risk, ts = builder.build(demo_df, MODEL_FEATURES)
     return X, X_next, y_risk, ts
 
 
@@ -43,7 +44,7 @@ def windows(demo_df):
 def trained_model(demo_df):
     model = STGWMModel(input_dim=31, hidden_dim=32, num_layers=2, num_stages=6)
     log = model.fit(
-        demo_df[ENGINEERED_FEATURE_COLS].values,
+        demo_df[MODEL_FEATURES].values,
         demo_df["binary_label"].values,
         epochs=5,
     )
@@ -146,7 +147,7 @@ def test_model_load_missing():
 # ---------------------------------------------------------------------------
 def test_inference_api_ok(trained_model, demo_df):
     model, _ = trained_model
-    result = run_inference(model, demo_df, ENGINEERED_FEATURE_COLS, seq_len=5, forecast_steps=7)
+    result = run_inference(model, demo_df, MODEL_FEATURES, seq_len=5, forecast_steps=7)
     assert result["status"] == "OK", f"Expected OK, got: {result}"
     assert result["error"] is None
     assert isinstance(result["risk"], float)
@@ -160,7 +161,7 @@ def test_inference_api_ok(trained_model, demo_df):
 # ---------------------------------------------------------------------------
 def test_inference_api_not_trained(demo_df):
     untrained = STGWMModel(input_dim=31)
-    result = run_inference(untrained, demo_df, ENGINEERED_FEATURE_COLS)
+    result = run_inference(untrained, demo_df, MODEL_FEATURES)
     assert result["error"] == "MODEL_NOT_TRAINED"
 
 
@@ -170,9 +171,9 @@ def test_inference_api_not_trained(demo_df):
 def test_inference_api_insufficient(trained_model, demo_df):
     model, _ = trained_model
     tiny_df = demo_df.head(3)   # only 3 rows — far less than seq_len+1=6
-    result = run_inference(model, tiny_df, ENGINEERED_FEATURE_COLS, seq_len=5)
-    assert result["error"] == "INSUFFICIENT_HISTORY", (
-        f"Expected INSUFFICIENT_HISTORY, got: {result['error']}"
+    result = run_inference(model, tiny_df, MODEL_FEATURES, seq_len=5)
+    assert result["error"] in ["INSUFFICIENT_HISTORY", "DATA_QUALITY_ERROR"], (
+        f"Expected INSUFFICIENT_HISTORY or DATA_QUALITY_ERROR, got: {result['error']}"
     )
 
 

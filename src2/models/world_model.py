@@ -45,7 +45,10 @@ class _FocalLoss(nn.Module):
 # Internal nn.Module
 # ---------------------------------------------------------------------------
 class _STGWMNet(nn.Module):
-    def __init__(self, input_dim=25, hidden_dim=64, num_layers=2, num_stages=6, dropout=0.3):
+    def __init__(self, input_dim=None, hidden_dim=64, num_layers=2, num_stages=6, dropout=0.3):
+        if input_dim is None:
+            from src2.data.schema import MODEL_INPUT_DIM
+            input_dim = MODEL_INPUT_DIM
         super().__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -82,7 +85,10 @@ class _STGWMNet(nn.Module):
 # Public wrapper
 # ---------------------------------------------------------------------------
 class STGWMModel:
-    def __init__(self, input_dim=25, hidden_dim=64, num_layers=2, num_stages=6):
+    def __init__(self, input_dim=None, hidden_dim=64, num_layers=2, num_stages=6):
+        if input_dim is None:
+            from src2.data.schema import MODEL_INPUT_DIM
+            input_dim = MODEL_INPUT_DIM
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -103,6 +109,9 @@ class STGWMModel:
         N, seq_len, F = X.shape
         if F != self.input_dim:
             raise ValueError(f"input_dim mismatch: model expects {self.input_dim}, got {F}")
+            
+        from src2.data.schema import MODEL_FEATURES
+        assert self.input_dim == len(MODEL_FEATURES), "Model input_dim must match canonical MODEL_FEATURES length"
 
         if scaler is not None:
             self._scaler = scaler
@@ -240,6 +249,12 @@ class STGWMModel:
         if X.ndim == 2:
             X = X[:, np.newaxis, :]
         N, seq_len, F = X.shape
+        if F != self.input_dim:
+            raise ValueError(f"input_dim mismatch: model expects {self.input_dim}, got {F}")
+            
+        from src2.data.schema import MODEL_FEATURES
+        assert self.input_dim == len(MODEL_FEATURES), "Model input_dim must match canonical MODEL_FEATURES length"
+        
         # Clean up any inf/nan before scaling
         X = np.nan_to_num(X, nan=0.0, posinf=1e9, neginf=-1e9)
         X = np.clip(X, -1e9, 1e9)
@@ -264,6 +279,12 @@ class STGWMModel:
         if not self._trained:
             raise RuntimeError("Model not trained.")
         seq_len, F = X_context.shape
+        if F != self.input_dim:
+            raise ValueError(f"input_dim mismatch: model expects {self.input_dim}, got {F}")
+            
+        from src2.data.schema import MODEL_FEATURES
+        assert self.input_dim == len(MODEL_FEATURES), "Model input_dim must match canonical MODEL_FEATURES length"
+        
         buf = np.clip(self._scaler.transform(X_context).astype(np.float32), -10.0, 10.0)
         risk_traj, stage_traj, dyn_traj = [], [], []
         self._net.eval()
@@ -286,8 +307,10 @@ class STGWMModel:
         model_dir.mkdir(parents=True, exist_ok=True)
         torch.save(self._net.state_dict(), model_dir / "stgwm.pt")
         joblib.dump(self._scaler, model_dir / "stgwm_scaler.pkl")
+        from src2.data.schema import MODEL_FEATURES
         cfg = {"input_dim": self.input_dim, "hidden_dim": self.hidden_dim,
                "num_layers": self.num_layers, "num_stages": self.num_stages,
+               "feature_schema": MODEL_FEATURES,
                "training_log": self._training_log}
         with open(model_dir / "stgwm_config.json", "w", encoding="utf-8") as fh:
             json.dump(cfg, fh, indent=2)
@@ -304,6 +327,11 @@ class STGWMModel:
             cfg = json.load(fh)
         if expected_input_dim is not None and cfg["input_dim"] != expected_input_dim:
             return None, "MODEL_SCHEMA_MISMATCH"
+            
+        from src2.data.schema import MODEL_FEATURES
+        saved_features = cfg.get("feature_schema", [])
+        if saved_features and saved_features != MODEL_FEATURES:
+            return None, "MODEL_FEATURE_MISMATCH"
         inst = cls(input_dim=cfg["input_dim"], hidden_dim=cfg["hidden_dim"],
                    num_layers=cfg["num_layers"], num_stages=cfg["num_stages"])
         inst._net = _STGWMNet(cfg["input_dim"], cfg["hidden_dim"], cfg["num_layers"], cfg["num_stages"])

@@ -54,19 +54,20 @@ def _stage_name(idx: int) -> str:
     return f"Stage{idx}"
 
 
-def _load_calibrated_threshold(model_dir: str = "eval_results") -> float:
-    """Load the threshold tuned on the validation set during training.
-    
-    Falls back to 0.5 if not found (e.g. before first retrain).
-    """
+def _load_calibrated_thresholds(model_dir: str = "eval_results") -> dict:
+    """Load both LR and LSTM thresholds."""
     thresh_path = Path(model_dir) / "calibrated_threshold.json"
     if thresh_path.exists():
         try:
             with open(thresh_path) as f:
-                return float(json.load(f).get("threshold", 0.5))
+                data = json.load(f)
+                return {
+                    "lr": float(data.get("lr_threshold", 0.5)),
+                    "lstm": float(data.get("lstm_threshold", 0.5))
+                }
         except Exception:
             pass
-    return 0.5
+    return {"lr": 0.5, "lstm": 0.5}
 
 
 def _load_lr_scorer(model_dir: str = "eval_results"):
@@ -136,8 +137,14 @@ def run_inference(
         return _make_error("MODEL_NOT_TRAINED")
 
     # ------------------------------------------------------------------
-    # 1. Data quality gate — minimum rows
+    # 1. Data quality gate
     # ------------------------------------------------------------------
+    from src2.data.schema import DataQualityGate
+    gate = DataQualityGate()
+    ok, msg = gate.validate(df_features)
+    if not ok:
+        return _make_error("DATA_QUALITY_ERROR", detail=msg)
+        
     n_rows = len(df_features)
     required = seq_len + 1
     if n_rows < required:
@@ -151,12 +158,7 @@ def run_inference(
     if "binary_label" not in df_work.columns:
         df_work["binary_label"] = 0.0
 
-    # Clip extreme values to prevent scaler overflow from stray packets
-    for col in feature_cols:
-        if col in df_work.columns:
-            q99 = df_work[col].quantile(0.99)
-            if q99 > 0:
-                df_work[col] = df_work[col].clip(upper=q99 * 10)
+    # (Clipping is now handled globally in prepare_model_features)
 
     try:
         builder = TemporalWindowBuilder(seq_len=seq_len)
@@ -169,50 +171,39 @@ def run_inference(
         return _make_error("INSUFFICIENT_HISTORY", required=required, available=n_rows)
 
     # ------------------------------------------------------------------
-    # 3. Per-window risk scoring — LR + LSTM Ensemble
+    # 3. Per-window risk scoring
     # ------------------------------------------------------------------
-    # Primary risk scorer: Logistic Regression (F1=0.81 on held-out test set)
-    # Trained on window-aggregated features, calibrated threshold from validation.
-    # LSTM provides temporal forecast trajectory and MITRE stage classification.
-    lr_scorer = _load_lr_scorer(model_dir)
-    threshold = _load_calibrated_threshold(model_dir)
-
+    thresholds = _load_calibrated_thresholds(model_dir)
+    
+    # 3.1 LSTM Stage Predictions & Trajectory
     preds = model.predict(X)
+    lstm_risk_raw = [float(p) for p in preds["risk_prob"]]
+    per_window_stage_idx = [int(s) for s in preds["stage_idx"]]
+    per_window_stage = [_stage_name(s) for s in per_window_stage_idx]
 
-    if lr_scorer is not None and hasattr(lr_scorer, 'predict_proba'):
-        X_flat = X.reshape(n_windows, -1)
-        try:
-            lr_risk_raw = [float(p) for p in lr_scorer.predict_proba(X_flat)[:, 1]]
-        except Exception as e:
-            print(f"LR Scorer error (likely feature dim mismatch): {e}")
-            lr_risk_raw = [float(p) for p in preds["risk_prob"]]
+    # 3.2 LR Current Risk Prediction (Primary)
+    lr_model = _load_lr_scorer(model_dir)
+    if lr_model is not None:
+        lr_probs = lr_model.predict_proba(X)
+        per_window_risk_raw = [float(p) for p in lr_probs]
+        current_threshold = thresholds["lr"]
     else:
-        lr_risk_raw = [float(p) for p in preds["risk_prob"]]
+        per_window_risk_raw = lstm_risk_raw
+        current_threshold = thresholds["lstm"]
 
-    # PRIMARY DETECTION: Logistic Regression (calibrated, stateless, high precision on protocol flags)
-    # LSTM risk output is used only for the FORECAST trajectory (its sigmoid is biased toward 1.0
-    # due to focal loss alpha=0.90 needed for 1.6% minority class training — not suitable as a
-    # real-time alert trigger on its own).
-    per_window_risk_raw = lr_risk_raw
-
-    # Apply MITRE rule-based classification to the current window
+    # Apply MITRE rule-based indicator matching on top
     from src2.intelligence.mitre import match_indicators
+    import pandas as pd
     df_current = pd.DataFrame(X[:, -1, :], columns=feature_cols)
     matched_current = match_indicators(df_current)
 
-    # For each window, if there's a match, use it, else Benign
-    # Since match_indicators returns matches for rows, we check it per row.
-    # Actually, match_indicators processes the whole DataFrame and returns a list of matched rule dicts,
-    # which contain 'window_indices'. We need to map this back to each window.
-    per_window_stage = ["Benign"] * n_windows
+    # Upgrade stage label if MITRE rule fires for that window
     for match in matched_current:
-        stage = match['stage']
-        for idx in match['window_indices']:
-            if per_window_stage[idx] == "Benign":
-                per_window_stage[idx] = stage
+        for idx in match.get('window_indices', []):
+            if idx < len(per_window_stage) and per_window_stage[idx] == "Benign":
+                per_window_stage[idx] = match['stage']
 
-
-    n_flagged = int(np.sum(np.array(per_window_risk_raw) > threshold))
+    n_flagged = int(np.sum(np.array(per_window_risk_raw) > current_threshold))
     risk_current = per_window_risk_raw[-1]
 
     # ------------------------------------------------------------------
@@ -262,7 +253,7 @@ def run_inference(
     matched_indicators = match_indicators(df_last)
 
     # Stage: explicitly rule/knowledge-graph based
-    if risk_current >= threshold:
+    if risk_current >= current_threshold:
         if matched_indicators:
             # Pick the stage of the most frequently matched indicator
             best_indicator = max(matched_indicators, key=lambda x: x.get('count', 0))
@@ -272,8 +263,8 @@ def run_inference(
     else:
         current_stage_name = "Benign"
 
-    # Confidence based on LR distance from threshold and rule match
-    base_conf = min(1.0, abs(risk_current - threshold) / max(threshold, 0.01))
+    # Confidence based on LR distance from current_threshold and rule match
+    base_conf = min(1.0, abs(risk_current - current_threshold) / max(current_threshold, 0.01))
     rule_bonus = 0.2 if matched_indicators else 0.0
     stage_confidence = min(1.0, base_conf + rule_bonus)
 
@@ -289,7 +280,7 @@ def run_inference(
     # ------------------------------------------------------------------
     from src2.intelligence.explainability import get_important_features, get_important_windows
 
-    important_features = get_important_features(model, lr_scorer, X, feature_cols, top_n=10)
+    important_features = get_important_features(model, X, feature_cols, top_n=10)
     important_windows  = get_important_windows(per_window_risk_raw, timestamps=timestamps)
 
     # ------------------------------------------------------------------
@@ -306,7 +297,7 @@ def run_inference(
         "risk_peak": risk_peak,
         "risk_level": _risk_level(risk_current),
         "risk_current": risk_current,
-        "threshold": threshold,
+        "threshold": current_threshold,
         "forecast": forecast_risk,
         "forecast_stages": forecast_stages_names,
         "stage": current_stage_name,

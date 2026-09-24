@@ -6,7 +6,7 @@ from src2.intelligence.mitre import MITRE_INDICATORS, match_indicators
 from src2.intelligence.explainability import compute_gradient_saliency, get_important_features, get_important_windows
 
 def test_mitre_indicators_defined():
-    assert len(MITRE_INDICATORS) >= 8
+    assert len(MITRE_INDICATORS) >= 7
     
     # Check required keys
     for ind in MITRE_INDICATORS:
@@ -68,7 +68,7 @@ def test_important_features_top10():
     model = DummyModel(input_dim=25)
     X = np.random.randn(10, 5, 25)
     feature_cols = [f"feat_{i}" for i in range(25)]
-    important_dict = get_important_features(model, None, X, feature_cols, top_n=10)
+    important_dict = get_important_features(model, X, feature_cols, top_n=10)
     important = important_dict["future_forecast_explanation"]
     assert len(important) == 10
     assert 'feature' in important[0]

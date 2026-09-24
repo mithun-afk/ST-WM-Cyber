@@ -1,4 +1,7 @@
 {
-  "threshold": 0.1,
-  "window_sec": 5
+  "schema_version": 1,
+  "lr_threshold": 0.1,
+  "lstm_threshold": 0.1,
+  "window_sec": 5,
+  "calibration_split": "validation"
 }
