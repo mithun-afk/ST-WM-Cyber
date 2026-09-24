@@ -1,6 +1,6 @@
 """
 app.py — ST-WM Network Attack Forecasting Dashboard
-NTRO Problem 26153 | Spatial-Temporal World Model | Fully Offline
+AI Network Forecaster | Spatial-Temporal World Model | Fully Offline
 """
 import os
 import sys
@@ -192,7 +192,7 @@ def stage_badge_html(stage: str) -> str:
 # Header
 # ---------------------------------------------------------------------------
 st.markdown(
-    '<div class="disclosure-bar">🛡️ NTRO PROBLEM 26153 &nbsp;|&nbsp; '
+    '<div class="disclosure-bar">🛡️ AI NETWORK FORECASTER &nbsp;|&nbsp; '
     'ST-WM SPATIAL-TEMPORAL WORLD MODEL &nbsp;|&nbsp; '
     'REAL-TIME NETWORK ATTACK FORECASTING &nbsp;|&nbsp; FULLY OFFLINE</div>',
     unsafe_allow_html=True

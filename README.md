@@ -6,7 +6,7 @@
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20On--Premise%20%2F%20Zero%20Cloud-success.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg)]()
 
-**ST-WM Cyber** is a next-generation network intrusion detection and forecasting dashboard engineered for the **NTRO Problem 26153**. It fuses a bespoke interactive Streamlit interface with a **100% local, zero-cloud Spatial-Temporal World Model (ST-WM)** powered by a highly robust Logistic Regression-Anchored Deep Learning Ensemble.
+**ST-WM Cyber** is a next-generation network intrusion detection and forecasting dashboard engineered for the **AI Network Forecaster**. It fuses a bespoke interactive Streamlit interface with a **100% local, zero-cloud Spatial-Temporal World Model (ST-WM)** powered by a highly robust Logistic Regression-Anchored Deep Learning Ensemble.
 
 It solves the critical "4K Video False Positive" problem in modern SOCs by isolating protocol kinematics from raw volumetric data—predicting attack trajectories 60 seconds into the future in real-time, explaining the exact mathematical reasoning behind its alerts, and establishing deterministic MITRE ATT&CK kill-chain mapping—without sending a single byte off your network.
 

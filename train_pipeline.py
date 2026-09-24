@@ -138,7 +138,7 @@ def aggregate_to_windows(df: pd.DataFrame, window_sec: float = 5.0) -> pd.DataFr
 
 def run_training():
     print("=" * 60)
-    print("NTRO 26153 — ST-WM PIPELINE 2.0 TRAINING")
+    print("AI Forecaster — ST-WM PIPELINE 2.0 TRAINING")
     print("Window-Level Training for Live Capture Accuracy")
     print("=" * 60)
 

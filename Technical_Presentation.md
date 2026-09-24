@@ -1,7 +1,7 @@
 ---
 title: "AI-Based Network Attack Forecasting"
 subtitle: "Spatial-Temporal World Model (ST-WM) Ensemble"
-author: "Team NTRO 26153"
+author: "Team AI Forecaster"
 theme: "dark"
 ---
 

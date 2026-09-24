@@ -12,50 +12,40 @@ import numpy as np
 from typing import List, Dict
 
 
-# ---------------------------------------------------------------------------
-# Realistic idle-traffic baseline for an idle Windows laptop on a corporate or
-# college network. These values represent a quiet machine sending background
-# traffic: ARP broadcasts, DHCP renewals, DNS TTL refreshes, NTP heartbeats.
-# Used as startup padding so the LSTM history buffer is not filled with
-# pathological all-zeros that look like a dead network to the StandardScaler.
-# ---------------------------------------------------------------------------
 _IDLE_BASELINE = {
-    "flow_duration":      28000.0,   # µs: ~28ms median per background flow (matches window-aggregated CIC median)
-    "fwd_pkts":              3.5,
-    "bwd_pkts":              1.0,
-    "fwd_bytes":           400.0,
-    "bwd_bytes":           130.0,
-    "flow_iat_mean":     16000.0,   # µs: matches window-aggregated training median
-    "flow_iat_std":       7000.0,
-    "syn_flag_cnt":          0.0,   # CIC window median = 0
-    "rst_flag_cnt":          0.1,
-    "psh_flag_cnt":          0.4,
-    "ack_flag_cnt":          0.2,
+    "flow_duration":         0.0,
+    "fwd_pkts":              0.0,
+    "bwd_pkts":              0.0,
+    "fwd_bytes":             0.0,
+    "bwd_bytes":             0.0,
+    "flow_iat_mean":         0.0,
+    "flow_iat_std":          0.0,
+    "syn_flag_cnt":          0.0,
+    "rst_flag_cnt":          0.0,
+    "psh_flag_cnt":          0.0,
+    "ack_flag_cnt":          0.0,
     "fin_flag_cnt":          0.0,
-    "pkt_len_mean":         68.0,   # matches training median ~67
-    "pkt_len_std":          75.0,
-    "flow_bytes_per_sec":  8000.0,  # moderate background traffic
-    "flow_pkts_per_sec":    120.0,
-    "init_fwd_win_bytes":  39000.0, # matches training median
-    "active_mean":           0.0,   # always 0 in CIC window aggregation
-    "idle_mean":             0.0,   # always 0 in CIC window aggregation
-    "down_up_ratio":         0.2,
+    "pkt_len_mean":          0.0,
+    "pkt_len_std":           0.0,
+    "flow_bytes_per_sec":    0.0,
+    "flow_pkts_per_sec":     0.0,
+    "init_fwd_win_bytes":    0.0,
+    "active_mean":           0.0,
+    "idle_mean":             0.0,
+    "down_up_ratio":         0.0,
     # PCAP extras
-    "ttl_mean":             64.0,
-    "ttl_std":               4.0,
+    "ttl_mean":              0.0,
+    "ttl_std":               0.0,
     "fragment_count":        0.0,
     "retransmit_count":      0.0,
-    "unique_dst_ips":        1.0,
-    "unique_dst_ports":      2.0,
+    "unique_dst_ips":        0.0,
+    "unique_dst_ports":      0.0,
 }
 
-
 def _empty_features() -> Dict[str, float]:
-    """Return an idle-baseline feature dict for LSTM startup padding.
+    """Return an all-zero feature dict for padding.
     
-    This represents a realistic quiet/idle network, NOT mathematical zeros.
-    Mathematical zeros cause the StandardScaler to produce extreme anomaly
-    signals for features with near-zero training variance (e.g. syn_flag_cnt).
+    This explicitly matches the 0.0 padding strategy used during training in train_pipeline.py.
     """
     return dict(_IDLE_BASELINE)
 

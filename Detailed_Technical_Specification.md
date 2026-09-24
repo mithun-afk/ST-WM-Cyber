@@ -1,5 +1,5 @@
 # Detailed Technical Specification: AI-Based Network Attack Forecasting (Pipeline 2.0)
-**Project / Problem Statement:** SIH 26153 (NTRO)
+**Project / Problem Statement:** Network Forecaster
 
 ## 1. Executive Summary
 This document specifies the architecture and validation methodology of our **Spatial-Temporal World Model (ST-WM) Ensemble**. 

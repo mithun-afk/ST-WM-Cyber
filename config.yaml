@@ -1,5 +1,5 @@
 # config.yaml
-# Configuration for NTRO Problem 26153 — AI-based Network Attack Forecasting
+# Configuration for AI Network Forecaster — AI-based Network Attack Forecasting
 
 paths:
   raw_data_dir: data/raw
