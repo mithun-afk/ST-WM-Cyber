@@ -1,12 +1,12 @@
 {
-  "input_dim": 25,
+  "input_dim": 31,
   "hidden_dim": 64,
   "num_layers": 2,
   "num_stages": 6,
   "training_log": {
-    "epochs_run": 30,
-    "best_val_loss": 0.054984042420983315,
-    "dynamics_mse": 1560033492992.0,
+    "epochs_run": 16,
+    "best_val_loss": 3.5561378641801866e-07,
+    "dynamics_mse": 7.10069514298084e-07,
     "converged": true
   }
 }

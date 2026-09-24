@@ -12,6 +12,18 @@ import plotly.graph_objects as go
 import plotly.express as px
 import torch
 
+try:
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+    if not get_script_run_ctx():
+        print("\n" + "="*60)
+        print("🚨 ERROR: This is a Streamlit Dashboard application.")
+        print("Please run it from your terminal using the following command:\n")
+        print("    streamlit run app.py")
+        print("="*60 + "\n")
+        sys.exit(1)
+except ImportError:
+    pass
+
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from src2.models.world_model import STGWMModel

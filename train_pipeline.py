@@ -166,6 +166,12 @@ def run_training():
 
     # Fill any NaNs produced by aggregation
     df_windowed = df_windowed.fillna(0.0)
+    df_windowed = df_windowed.replace([np.inf, -np.inf], 0.0)
+    
+    # Clip extreme values to prevent float32 overflow
+    for col in ENGINEERED_FEATURE_COLS:
+        if col in df_windowed.columns:
+            df_windowed[col] = df_windowed[col].clip(lower=-1e30, upper=1e30)
 
     # Ensure all required feature columns exist
     for col in ENGINEERED_FEATURE_COLS:
@@ -264,10 +270,16 @@ def run_training():
 
     # Save calibrated threshold so inference.py can use it
     import json
+    import joblib
+    
     thresh_path = os.path.join(OUT_DIR, "calibrated_threshold.json")
     with open(thresh_path, "w") as f:
         json.dump({"threshold": float(lstm_thresh), "window_sec": WINDOW_SEC}, f, indent=2)
     print(f"\nCalibrated threshold saved to {thresh_path}")
+    
+    lr_path = os.path.join(OUT_DIR, "lr_pipeline.pkl")
+    joblib.dump({"pipeline": lr_model._model}, lr_path)
+    print(f"LR Baseline saved to {lr_path}")
 
     # ------------------------------------------------------------------
     # 9. Save benchmark CSV for UI display

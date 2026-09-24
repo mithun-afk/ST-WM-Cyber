@@ -27,12 +27,18 @@ class LogisticRegressionBaseline:
     """
 
     def __init__(self, C: float = 1.0, class_weight: str = "balanced") -> None:
-        self._model = LogisticRegression(
-            C=C,
-            class_weight=class_weight,
-            max_iter=1000,
-            solver="lbfgs",
-        )
+        from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import StandardScaler
+        
+        self._model = Pipeline([
+            ("scaler", StandardScaler()),
+            ("lr", LogisticRegression(
+                C=C,
+                class_weight=class_weight,
+                max_iter=1000,
+                solver="lbfgs",
+            ))
+        ])
         self._trained = False
 
     # ------------------------------------------------------------------
